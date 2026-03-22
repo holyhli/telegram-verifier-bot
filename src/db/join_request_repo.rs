@@ -123,22 +123,34 @@ impl JoinRequestRepo {
         pool: &PgPool,
         cutoff: DateTime<Utc>,
     ) -> Result<Vec<JoinRequest>, AppError> {
-        let rows = sqlx::query_as!(
-            JoinRequest,
+        let rows = sqlx::query_as::<_, JoinRequest>(
             r#"SELECT id, community_id, applicant_id, telegram_user_chat_id,
-                 status as "status: JoinRequestStatus",
-                 telegram_join_request_date, submitted_to_moderators_at, approved_at, rejected_at,
-                 moderator_message_chat_id, moderator_message_id,
+                 status, telegram_join_request_date, submitted_to_moderators_at,
+                 approved_at, rejected_at, moderator_message_chat_id, moderator_message_id,
                  created_at, updated_at, reminder_sent_at
              FROM join_requests
-             WHERE status IN ('pending_contact', 'questionnaire_in_progress', 'submitted')
+             WHERE status IN ('pending_contact', 'questionnaire_in_progress')
                AND created_at < $1"#,
-            cutoff,
         )
+        .bind(cutoff)
         .fetch_all(pool)
         .await?;
 
         Ok(rows)
+    }
+
+    pub async fn update_reminder_sent_at(
+        pool: &PgPool,
+        id: i64,
+    ) -> Result<(), AppError> {
+        sqlx::query(
+            "UPDATE join_requests SET reminder_sent_at = NOW(), updated_at = NOW() WHERE id = $1",
+        )
+        .bind(id)
+        .execute(pool)
+        .await?;
+
+        Ok(())
     }
 
     pub async fn find_needing_reminder(
