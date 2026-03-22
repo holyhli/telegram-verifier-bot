@@ -1,8 +1,24 @@
-/target
+# Rust build artifacts
+/target/
+**/*.rs.bk
+Cargo.lock
+
+# Environment and configuration (secrets)
 .env
+config.toml
 !.env.example
 !.env.test
+!config.example.toml
+
+# Editor files
 *.swp
 *.swo
 *~
 .DS_Store
+
+# IDE
+.idea/
+
+# OS
+.vscode/
+*.iml
