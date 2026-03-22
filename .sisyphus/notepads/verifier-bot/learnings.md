@@ -195,3 +195,27 @@ This file tracks conventions, patterns, and architectural decisions discovered d
 - Added `tests/questionnaire_tests.rs` with 11 tests covering validation outcomes, persistence, non-advancement on invalid answers, completion path, no-session ignore, and full 5-question flow with final status assertion (`submitted`).
 - `cargo test questionnaire` runs tests whose names contain `questionnaire` across multiple test files (not just `questionnaire_tests.rs`).
 - `#[sqlx::test]` requires `DATABASE_URL` to be set; command used in this repo remains: `DATABASE_URL="postgres://verifier:verifier_dev@localhost:5432/verifier_bot_test" cargo test ...`.
+
+## [2026-03-22] Task 6: Moderator Card + Inline Actions + Audit Trail
+
+### Moderator Card Delivery
+- Added `src/services/moderator.rs` with `render_moderator_card()` and `send_moderator_card()`.
+- Card payload is rendered in HTML with escaped user-provided fields and compact callback payloads (`a:{id}`, `r:{id}`, `b:{id}`).
+- `send_moderator_card()` now sends HTML + inline keyboard to `default_moderator_chat_id` and persists `submitted_to_moderators_at`, `moderator_message_chat_id`, and `moderator_message_id` on the join request.
+
+### Callback Moderation Flow
+- Replaced callback stub with `src/bot/handlers/callbacks.rs` and a testable core entrypoint `process_callback_query()`.
+- Flow is: parse callback data -> moderator authorization (`allowed_moderator_ids`) -> status guard (`submitted`) -> optimistic lock transition -> Telegram approve/decline -> audit insert -> card edit + keyboard removal -> callback acknowledgement.
+- Ban action is implemented as decline + blacklist entry (`ScopeType::Community`) and does not call `banChatMember`.
+
+### Telegram API Error Handling
+- Added friendly callback handling for invalid payload, unauthorized moderator, already-processed joins, and Telegram `HIDE_REQUESTER_MISSING` (reported as "Request already processed outside bot").
+- Applicant notification failures from blocked/deactivated/unreachable users are treated as non-fatal so moderation completion still persists.
+
+### API Abstraction Update
+- Extended `TelegramApi` trait for moderation operations: HTML send/edit, callback answer, approve request, and reply-markup clearing.
+- `TeloxideApi` now uses teloxide setter traits (`SendMessageSetters`, `EditMessageTextSetters`, `AnswerCallbackQuerySetters`) for parse mode and callback text.
+
+### Testing Coverage
+- Added `tests/moderation_tests.rs` with 12 moderation-specific tests (>=10 required): card rendering, callback parsing, authorization checks, approve/reject/ban flows, optimistic double-processing behavior, and Telegram error paths.
+- Full verification command used: `DATABASE_URL="postgres://verifier:verifier_dev@localhost:5432/verifier_bot_test" cargo test --all`.

@@ -3,6 +3,7 @@ use chrono::Utc;
 use sqlx::PgPool;
 use std::sync::{Arc, Mutex};
 use teloxide::RequestError;
+use teloxide::types::InlineKeyboardMarkup;
 use verifier_bot::bot::handlers::questionnaire::{process_private_message, PrivateMessageInput};
 use verifier_bot::bot::handlers::TelegramApi;
 use verifier_bot::db::{JoinRequestRepo, SessionRepo};
@@ -40,6 +41,52 @@ impl TelegramApi for FakeTelegramApi {
     }
 
     async fn decline_chat_join_request(
+        &self,
+        _chat_id: i64,
+        _user_id: i64,
+    ) -> Result<(), RequestError> {
+        Ok(())
+    }
+
+    async fn send_message_html(
+        &self,
+        chat_id: i64,
+        text: String,
+        _reply_markup: Option<InlineKeyboardMarkup>,
+    ) -> Result<i64, RequestError> {
+        self.sent_messages
+            .lock()
+            .expect("lock sent_messages")
+            .push((chat_id, text));
+        Ok(1)
+    }
+
+    async fn edit_message_html(
+        &self,
+        _chat_id: i64,
+        _message_id: i64,
+        _text: String,
+    ) -> Result<(), RequestError> {
+        Ok(())
+    }
+
+    async fn clear_message_reply_markup(
+        &self,
+        _chat_id: i64,
+        _message_id: i64,
+    ) -> Result<(), RequestError> {
+        Ok(())
+    }
+
+    async fn answer_callback_query(
+        &self,
+        _callback_query_id: String,
+        _text: String,
+    ) -> Result<(), RequestError> {
+        Ok(())
+    }
+
+    async fn approve_chat_join_request(
         &self,
         _chat_id: i64,
         _user_id: i64,
@@ -193,6 +240,7 @@ async fn questionnaire_process_answer_stores_and_advances(pool: PgPool) -> sqlx:
         &api,
         &pool,
         sample_private_message_input(telegram_user_id, "I am an active contributor."),
+        -100_123,
     )
     .await
     .expect("process private message");
@@ -223,7 +271,12 @@ async fn questionnaire_validation_failure_does_not_advance_or_store(pool: PgPool
     let join_request_id = seed_active_questionnaire(&pool, telegram_user_id, 2).await;
     let api = FakeTelegramApi::new();
 
-    process_private_message(&api, &pool, sample_private_message_input(telegram_user_id, "test"))
+    process_private_message(
+        &api,
+        &pool,
+        sample_private_message_input(telegram_user_id, "test"),
+        -100_123,
+    )
         .await
         .expect("validation failure should be handled");
 
@@ -260,6 +313,7 @@ async fn questionnaire_process_answer_completes_on_last_question(pool: PgPool) -
         &api,
         &pool,
         sample_private_message_input(telegram_user_id, "I can help others and share knowledge."),
+        -100_123,
     )
     .await
     .expect("last question should complete flow");
@@ -277,11 +331,12 @@ async fn questionnaire_process_answer_completes_on_last_question(pool: PgPool) -
     assert_eq!(status, "submitted");
 
     let sent = api.sent_messages();
-    assert_eq!(sent.len(), 1);
+    assert_eq!(sent.len(), 2);
     assert_eq!(
         sent[0].1,
         "Thanks — your application has been submitted to the moderators.\nYou'll be notified once a decision is made."
     );
+    assert!(sent[1].1.contains("<b>📋 New Join Request</b>"));
 
     Ok(())
 }
@@ -300,6 +355,7 @@ async fn questionnaire_full_five_question_flow_submits(pool: PgPool) -> sqlx::Re
                 telegram_user_id,
                 &format!("This is a detailed answer number {idx}."),
             ),
+            -100_123,
         )
         .await
         .expect("flow step must succeed");
@@ -326,7 +382,12 @@ async fn questionnaire_full_five_question_flow_submits(pool: PgPool) -> sqlx::Re
 async fn questionnaire_out_of_order_no_session_is_ignored(pool: PgPool) -> sqlx::Result<()> {
     let api = FakeTelegramApi::new();
 
-    process_private_message(&api, &pool, sample_private_message_input(99_999, "Hello?"))
+    process_private_message(
+        &api,
+        &pool,
+        sample_private_message_input(99_999, "Hello?"),
+        -100_123,
+    )
         .await
         .expect("no active session should be ignored");
 

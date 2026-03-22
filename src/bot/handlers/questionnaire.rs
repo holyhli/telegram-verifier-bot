@@ -1,8 +1,12 @@
+use std::sync::Arc;
+
 use sqlx::PgPool;
 use teloxide::prelude::Bot;
 use teloxide::types::Message;
 
+use crate::config::Config;
 use crate::error::AppError;
+use crate::services::moderator::send_moderator_card;
 use crate::services::questionnaire::{
     find_active_context_by_telegram_user_id, process_answer, ProcessAnswerResult, QuestionnaireStep,
 };
@@ -18,7 +22,12 @@ pub struct PrivateMessageInput {
     pub text: String,
 }
 
-pub async fn handle_private_message(bot: Bot, msg: Message, pool: PgPool) -> Result<(), AppError> {
+pub async fn handle_private_message(
+    bot: Bot,
+    msg: Message,
+    pool: PgPool,
+    config: Arc<Config>,
+) -> Result<(), AppError> {
     if !msg.chat.is_private() {
         return Ok(());
     }
@@ -43,13 +52,14 @@ pub async fn handle_private_message(bot: Bot, msg: Message, pool: PgPool) -> Res
         text: text.to_string(),
     };
 
-    process_private_message(&api, &pool, input).await
+    process_private_message(&api, &pool, input, config.default_moderator_chat_id).await
 }
 
 pub async fn process_private_message(
     api: &dyn TelegramApi,
     pool: &PgPool,
     input: PrivateMessageInput,
+    default_moderator_chat_id: i64,
 ) -> Result<(), AppError> {
     let Some(context) = find_active_context_by_telegram_user_id(pool, input.telegram_user_id).await?
     else {
@@ -82,10 +92,8 @@ pub async fn process_private_message(
                 .await
                 .map_err(|err| AppError::Telegram(err.to_string()))?;
 
-            tracing::info!(
-                join_request_id = join_request.id,
-                "TODO: send moderator card"
-            );
+            let _updated = send_moderator_card(api, pool, join_request.id, default_moderator_chat_id)
+                .await?;
         }
     }
 

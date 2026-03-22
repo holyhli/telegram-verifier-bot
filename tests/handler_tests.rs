@@ -4,6 +4,7 @@ use sqlx::PgPool;
 use std::sync::{Arc, Mutex};
 use teloxide::ApiError;
 use teloxide::RequestError;
+use teloxide::types::InlineKeyboardMarkup;
 use verifier_bot::bot::handlers::join_request::{process_join_request, JoinRequestInput};
 use verifier_bot::bot::handlers::start::{process_start, StartInput};
 use verifier_bot::bot::handlers::TelegramApi;
@@ -70,6 +71,48 @@ impl TelegramApi for FakeTelegramApi {
             .lock()
             .expect("lock declined_requests")
             .push((chat_id, user_id));
+        Ok(())
+    }
+
+    async fn send_message_html(
+        &self,
+        _chat_id: i64,
+        _text: String,
+        _reply_markup: Option<InlineKeyboardMarkup>,
+    ) -> Result<i64, RequestError> {
+        Ok(1)
+    }
+
+    async fn edit_message_html(
+        &self,
+        _chat_id: i64,
+        _message_id: i64,
+        _text: String,
+    ) -> Result<(), RequestError> {
+        Ok(())
+    }
+
+    async fn clear_message_reply_markup(
+        &self,
+        _chat_id: i64,
+        _message_id: i64,
+    ) -> Result<(), RequestError> {
+        Ok(())
+    }
+
+    async fn answer_callback_query(
+        &self,
+        _callback_query_id: String,
+        _text: String,
+    ) -> Result<(), RequestError> {
+        Ok(())
+    }
+
+    async fn approve_chat_join_request(
+        &self,
+        _chat_id: i64,
+        _user_id: i64,
+    ) -> Result<(), RequestError> {
         Ok(())
     }
 }
