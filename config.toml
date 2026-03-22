@@ -9,25 +9,29 @@ slug = "near-ukraine-guild"
 
 [[communities.questions]]
 key = "name"
-text = "What is your name?"
+text_en = "What is your name?"
+text_uk = "Як вас звати?"
 required = true
 position = 1
 
 [[communities.questions]]
 key = "occupation"
-text = "What do you do / where do you work?"
+text_en = "What do you do / where do you work?"
+text_uk = "Чим ви займаєтесь / де ви працюєте?"
 required = true
 position = 2
 
 [[communities.questions]]
 key = "near_experience"
-text = "Do you have experience with NEAR Protocol?"
+text_en = "Do you have experience with NEAR Protocol?"
+text_uk = "Чи маєте ви досвід роботи з NEAR Protocol?"
 required = false
 position = 3
 
 [[communities.questions]]
 key = "motivation"
-text = "Why do you want to join this community?"
+text_en = "Why do you want to join this community?"
+text_uk = "Чому ви хочете приєднатися до цієї спільноти?"
 required = true
 position = 4
 
@@ -38,24 +42,28 @@ slug = "teajs-ukraine"
 
 [[communities.questions]]
 key = "name"
-text = "What is your name?"
+text_en = "What is your name?"
+text_uk = "Як вас звати?"
 required = true
 position = 1
 
 [[communities.questions]]
 key = "occupation"
-text = "What do you do / where do you work?"
+text_en = "What do you do / where do you work?"
+text_uk = "Чим ви займаєтесь / де ви працюєте?"
 required = true
 position = 2
 
 [[communities.questions]]
 key = "js_experience"
-text = "What is your experience with JavaScript/TypeScript?"
+text_en = "What is your experience with JavaScript/TypeScript?"
+text_uk = "Який у вас досвід роботи з JavaScript/TypeScript?"
 required = true
 position = 3
 
 [[communities.questions]]
 key = "motivation"
-text = "Why do you want to join TeaJS Ukraine?"
+text_en = "Why do you want to join TeaJS Ukraine?"
+text_uk = "Чому ви хочете приєднатися до TeaJS Ukraine?"
 required = true
 position = 4
