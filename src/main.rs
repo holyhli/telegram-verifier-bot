@@ -1,3 +1,6 @@
+use std::sync::Arc;
+
+use verifier_bot::bot::handlers::{TelegramApi, TeloxideApi};
 use verifier_bot::config::Config;
 use verifier_bot::db::{create_pool, run_migrations};
 use verifier_bot::error::AppError;
@@ -22,9 +25,24 @@ async fn main() -> anyhow::Result<()> {
 
     let bot = teloxide::Bot::new(config.bot_token.clone());
 
-    verifier_bot::bot::run_dispatcher(bot, pool, config)
-        .await
-        .map_err(|err: AppError| anyhow::anyhow!(err.to_string()))?;
+    let expiry_api: Arc<dyn TelegramApi> = Arc::new(TeloxideApi::new(bot.clone()));
+    let expiry_pool = pool.clone();
+    let expiry_settings = config.bot_settings.clone();
+    tokio::spawn(async move {
+        verifier_bot::services::expiry::run_expiry_loop(expiry_api, expiry_pool, expiry_settings)
+            .await;
+    });
 
+    let result = if config.use_webhooks {
+        tracing::info!("starting in webhook mode");
+        verifier_bot::bot::run_webhook(bot, pool, config).await
+    } else {
+        tracing::info!("starting in polling mode");
+        verifier_bot::bot::run_polling(bot, pool, config).await
+    };
+
+    result.map_err(|err: AppError| anyhow::anyhow!(err.to_string()))?;
+
+    tracing::info!("verifier-bot stopped");
     Ok(())
 }
