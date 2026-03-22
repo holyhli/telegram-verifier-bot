@@ -1,0 +1,61 @@
+[bot]
+application_timeout_minutes = 60
+reminder_before_expiry_minutes = 15
+
+[[communities]]
+telegram_chat_id = -1001591902939
+title = "Near Ukraine Guild"
+slug = "near-ukraine-guild"
+
+[[communities.questions]]
+key = "name"
+text = "What is your name?"
+required = true
+position = 1
+
+[[communities.questions]]
+key = "occupation"
+text = "What do you do / where do you work?"
+required = true
+position = 2
+
+[[communities.questions]]
+key = "near_experience"
+text = "Do you have experience with NEAR Protocol?"
+required = false
+position = 3
+
+[[communities.questions]]
+key = "motivation"
+text = "Why do you want to join this community?"
+required = true
+position = 4
+
+[[communities]]
+telegram_chat_id = -1001428286534
+title = "TeaJS Ukraine"
+slug = "teajs-ukraine"
+
+[[communities.questions]]
+key = "name"
+text = "What is your name?"
+required = true
+position = 1
+
+[[communities.questions]]
+key = "occupation"
+text = "What do you do / where do you work?"
+required = true
+position = 2
+
+[[communities.questions]]
+key = "js_experience"
+text = "What is your experience with JavaScript/TypeScript?"
+required = true
+position = 3
+
+[[communities.questions]]
+key = "motivation"
+text = "Why do you want to join TeaJS Ukraine?"
+required = true
+position = 4

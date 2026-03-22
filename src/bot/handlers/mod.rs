@@ -2,13 +2,14 @@ pub mod join_request;
 pub mod callbacks;
 pub mod questionnaire;
 pub mod start;
+pub mod language_selection;
 
 use async_trait::async_trait;
 use teloxide::payloads::{
     AnswerCallbackQuerySetters, EditMessageTextSetters, SendMessageSetters,
 };
 use teloxide::prelude::Requester;
-use teloxide::types::{InlineKeyboardMarkup, Message, ParseMode};
+use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup, Message, ParseMode};
 use teloxide::{Bot, RequestError};
 
 #[async_trait]
@@ -20,6 +21,12 @@ pub trait TelegramApi: Send + Sync {
         text: String,
         reply_markup: Option<InlineKeyboardMarkup>,
     ) -> Result<i64, RequestError>;
+    async fn send_message_with_inline_keyboard(
+        &self,
+        chat_id: i64,
+        text: String,
+        keyboard: Vec<Vec<(String, String)>>,
+    ) -> Result<(), RequestError>;
     async fn edit_message_html(
         &self,
         chat_id: i64,
@@ -154,6 +161,31 @@ impl TelegramApi for TeloxideApi {
             )
             .await
             .map(|_| ())
+    }
+
+    async fn send_message_with_inline_keyboard(
+        &self,
+        chat_id: i64,
+        text: String,
+        keyboard: Vec<Vec<(String, String)>>,
+    ) -> Result<(), RequestError> {
+        let buttons: Vec<Vec<InlineKeyboardButton>> = keyboard
+            .into_iter()
+            .map(|row| {
+                row.into_iter()
+                    .map(|(text, data)| InlineKeyboardButton::callback(text, data))
+                    .collect()
+            })
+            .collect();
+
+        let markup = InlineKeyboardMarkup::new(buttons);
+
+        self.bot
+            .send_message(teloxide::types::ChatId(chat_id), text)
+            .reply_markup(markup)
+            .await?;
+
+        Ok(())
     }
 }
 

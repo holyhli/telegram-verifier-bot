@@ -9,19 +9,22 @@ slug = "defi-amsterdam"
 
 [[communities.questions]]
 key = "name"
-text = "What is your name?"
+text_en = "What is your name?"
+text_uk = "Як вас звати?"
 required = true
 position = 1
 
 [[communities.questions]]
 key = "occupation"
-text = "What do you do / where do you work?"
+text_en = "What do you do / where do you work?"
+text_uk = "Чим ви займаєтесь / де ви працюєте?"
 required = true
 position = 2
 
 [[communities.questions]]
 key = "referral"
-text = "How did you hear about us?"
+text_en = "How did you hear about us?"
+text_uk = "Як ви про нас дізналися?"
 required = false
 position = 3
 
@@ -32,24 +35,28 @@ slug = "rust-nl"
 
 [[communities.questions]]
 key = "name"
-text = "What is your full name?"
+text_en = "What is your full name?"
+text_uk = "Як вас звати (повне ім'я)?"
 required = true
 position = 1
 
 [[communities.questions]]
 key = "experience"
-text = "What is your experience with Rust?"
+text_en = "What is your experience with Rust?"
+text_uk = "Який у вас досвід роботи з Rust?"
 required = true
 position = 2
 
 [[communities.questions]]
 key = "github"
-text = "Link to your GitHub profile (optional)"
+text_en = "Link to your GitHub profile (optional)"
+text_uk = "Посилання на ваш профіль GitHub (необов'язково)"
 required = false
 position = 3
 
 [[communities.questions]]
 key = "motivation"
-text = "Why do you want to join this community?"
+text_en = "Why do you want to join this community?"
+text_uk = "Чому ви хочете приєднатися до цієї спільноти?"
 required = true
 position = 4

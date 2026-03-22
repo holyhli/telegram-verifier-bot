@@ -4,7 +4,7 @@ use verifier_bot::db::{
     AnswerRepo, ApplicantRepo, BlacklistRepo, CommunityRepo, JoinRequestRepo,
     ModerationActionRepo, SessionRepo,
 };
-use verifier_bot::domain::{ActionType, JoinRequestStatus, ScopeType, SessionState};
+use verifier_bot::domain::{ActionType, JoinRequestStatus, Language, ScopeType, SessionState};
 use verifier_bot::error::AppError;
 
 async fn seed_community(pool: &PgPool) -> i64 {
@@ -486,7 +486,7 @@ async fn session_lifecycle(pool: PgPool) -> sqlx::Result<()> {
         .await
         .expect("create jr");
 
-    let session = SessionRepo::create(&pool, jr.id, 1)
+    let session = SessionRepo::create(&pool, jr.id, 1, Language::English)
         .await
         .expect("create session");
     assert_eq!(session.state, SessionState::AwaitingAnswer);
@@ -524,7 +524,7 @@ async fn session_expire(pool: PgPool) -> sqlx::Result<()> {
         .await
         .expect("create jr");
 
-    let session = SessionRepo::create(&pool, jr.id, 1)
+    let session = SessionRepo::create(&pool, jr.id, 1, Language::English)
         .await
         .expect("create session");
 

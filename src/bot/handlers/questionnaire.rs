@@ -6,14 +6,13 @@ use teloxide::types::Message;
 
 use crate::config::Config;
 use crate::error::AppError;
+use crate::messages::Messages;
 use crate::services::moderator::send_moderator_card;
 use crate::services::questionnaire::{
     find_active_context_by_telegram_user_id, process_answer, ProcessAnswerResult, QuestionnaireStep,
 };
 
 use super::{TelegramApi, TeloxideApi};
-
-const COMPLETION_MESSAGE: &str = "Thanks — your application has been submitted to the moderators.\nYou'll be notified once a decision is made.";
 
 #[derive(Debug, Clone)]
 pub struct PrivateMessageInput {
@@ -70,25 +69,28 @@ pub async fn process_private_message(
         return Ok(());
     };
 
+    let language = context.session.language;
     let result = process_answer(pool, context, &input.text).await?;
 
     match result {
         ProcessAnswerResult::ValidationFailed { message } => {
-            api.send_message(input.chat_id, message.to_string())
+            api.send_message(input.chat_id, message)
                 .await
                 .map_err(|err| AppError::Telegram(err.to_string()))?;
         }
         ProcessAnswerResult::Advanced {
             step: QuestionnaireStep::NextQuestion { question },
         } => {
-            api.send_message(input.chat_id, question.question_text)
+            let question_text = question.text_for_language(language);
+            api.send_message(input.chat_id, question_text.to_string())
                 .await
                 .map_err(|err| AppError::Telegram(err.to_string()))?;
         }
         ProcessAnswerResult::Advanced {
             step: QuestionnaireStep::Completed { join_request },
         } => {
-            api.send_message(input.chat_id, COMPLETION_MESSAGE.to_string())
+            let completion_msg = Messages::completion_message(language);
+            api.send_message(input.chat_id, completion_msg)
                 .await
                 .map_err(|err| AppError::Telegram(err.to_string()))?;
 

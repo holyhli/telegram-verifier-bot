@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, community_id, applicant_id, telegram_user_chat_id,\n                 status as \"status: JoinRequestStatus\",\n                 telegram_join_request_date, submitted_to_moderators_at, approved_at, rejected_at,\n                 moderator_message_chat_id, moderator_message_id,\n                 created_at, updated_at, reminder_sent_at\n             FROM join_requests\n             WHERE status IN ('pending_contact', 'questionnaire_in_progress', 'submitted')\n               AND created_at < $1",
+  "query": "SELECT jr.id, jr.community_id, jr.applicant_id, jr.telegram_user_chat_id,\n                 jr.status as \"status: JoinRequestStatus\",\n                 jr.telegram_join_request_date, jr.submitted_to_moderators_at, jr.approved_at, jr.rejected_at,\n                 jr.moderator_message_chat_id, jr.moderator_message_id,\n                 jr.created_at, jr.updated_at, jr.reminder_sent_at\n             FROM join_requests jr\n             JOIN applicants a ON jr.applicant_id = a.id\n             WHERE a.telegram_user_id = $1 AND jr.telegram_user_chat_id = $2\n               AND jr.status NOT IN ('approved', 'rejected', 'banned', 'expired', 'cancelled')\n             ORDER BY jr.created_at DESC\n             LIMIT 1",
   "describe": {
     "columns": [
       {
@@ -76,7 +76,8 @@
     ],
     "parameters": {
       "Left": [
-        "Timestamptz"
+        "Int8",
+        "Int8"
       ]
     },
     "nullable": [
@@ -96,5 +97,5 @@
       true
     ]
   },
-  "hash": "77e0bbfd530fcead3658cfdfb8633c908b3904c51181637b57bf73689a1a5c1a"
+  "hash": "89afae478a7efe36668ca4eca6e87d9c983e6c476fe827a52da30867a8363c87"
 }

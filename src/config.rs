@@ -5,7 +5,8 @@ use crate::error::ConfigError;
 #[derive(Debug, Clone, Deserialize)]
 pub struct Question {
     pub key: String,
-    pub text: String,
+    pub text_en: String,
+    pub text_uk: String,
     pub required: bool,
     pub position: u32,
 }
@@ -158,6 +159,7 @@ impl Config {
             }
 
             validate_question_positions(&community.slug, &community.questions, &mut errors);
+            validate_question_texts(&community.slug, &community.questions, &mut errors);
         }
 
         if errors.is_empty() {
@@ -204,5 +206,22 @@ fn validate_question_positions(slug: &str, questions: &[Question], errors: &mut 
             "community '{slug}' has gaps in question positions (expected 1..={}, got {positions:?})",
             questions.len()
         ));
+    }
+}
+
+fn validate_question_texts(slug: &str, questions: &[Question], errors: &mut Vec<String>) {
+    for question in questions {
+        if question.text_en.trim().is_empty() {
+            errors.push(format!(
+                "community '{slug}' question '{}' has empty English text",
+                question.key
+            ));
+        }
+        if question.text_uk.trim().is_empty() {
+            errors.push(format!(
+                "community '{slug}' question '{}' has empty Ukrainian text",
+                question.key
+            ));
+        }
     }
 }

@@ -5,9 +5,10 @@ use teloxide::types::ChatJoinRequest;
 use teloxide::ApiError;
 use teloxide::RequestError;
 
-use crate::db::{ApplicantRepo, BlacklistRepo, CommunityRepo, JoinRequestRepo, SessionRepo};
+use crate::db::{ApplicantRepo, BlacklistRepo, CommunityRepo, JoinRequestRepo};
 use crate::domain::{JoinRequestStatus, ScopeType};
 use crate::error::AppError;
+use crate::messages::Messages;
 
 use super::{TelegramApi, TeloxideApi};
 
@@ -120,39 +121,23 @@ pub async fn process_join_request(
     )
     .await?;
 
-    let first_question = CommunityRepo::find_active_questions(pool, community.id)
-        .await?
-        .into_iter()
-        .find(|q| q.position == 1)
-        .ok_or_else(|| {
-            AppError::Internal(format!(
-                "community {} has no active question at position 1",
-                community.id
-            ))
-        })?;
+    let text = Messages::language_selection_message(&input.first_name, &input.community_title);
 
-    let text = format!(
-        "Hi {}! I saw your request to join {}.\n\nBefore a moderator reviews it, please answer a few quick questions.\n\n{}",
-        input.first_name, input.community_title, first_question.question_text
-    );
+    let keyboard = vec![vec![
+        ("🇬🇧 English".to_string(), "lang:en".to_string()),
+        ("🇺🇦 Українська".to_string(), "lang:uk".to_string()),
+    ]];
 
-    match api.send_message(input.user_chat_id, text).await {
+    match api
+        .send_message_with_inline_keyboard(input.user_chat_id, text, keyboard)
+        .await
+    {
         Ok(()) => {
-            SessionRepo::create(pool, join_request.id, 1).await?;
-            let updated = JoinRequestRepo::update_status(
-                pool,
-                join_request.id,
-                JoinRequestStatus::PendingContact,
-                JoinRequestStatus::QuestionnaireInProgress,
-                join_request.updated_at,
-            )
-            .await?;
-
             tracing::info!(
-                join_request_id = updated.id,
-                community_id = updated.community_id,
+                join_request_id = join_request.id,
+                community_id = community.id,
                 telegram_user_id = applicant.telegram_user_id,
-                "join request processed"
+                "language selection message sent"
             );
 
             Ok(())

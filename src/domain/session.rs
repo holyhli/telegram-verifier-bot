@@ -1,3 +1,4 @@
+use crate::domain::Language;
 use chrono::{DateTime, Utc};
 use std::fmt;
 
@@ -30,6 +31,7 @@ pub struct ApplicantSession {
     pub join_request_id: i64,
     pub current_question_position: i32,
     pub state: SessionState,
+    pub language: Language,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

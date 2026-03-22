@@ -45,11 +45,12 @@ async fn sync_questions(
     for question in &community.questions {
         sqlx::query!(
             r#"
-            INSERT INTO community_questions (community_id, question_key, question_text, required, position, is_active)
-            VALUES ($1, $2, $3, $4, $5, TRUE)
+            INSERT INTO community_questions (community_id, question_key, question_text, question_text_uk, required, position, is_active)
+            VALUES ($1, $2, $3, $4, $5, $6, TRUE)
             ON CONFLICT (community_id, question_key) WHERE is_active = TRUE
             DO UPDATE
                 SET question_text = EXCLUDED.question_text,
+                    question_text_uk = EXCLUDED.question_text_uk,
                     required = EXCLUDED.required,
                     position = EXCLUDED.position,
                     is_active = TRUE,
@@ -57,7 +58,8 @@ async fn sync_questions(
             "#,
             community_id,
             question.key,
-            question.text,
+            question.text_en,
+            question.text_uk,
             question.required,
             question.position as i32,
         )

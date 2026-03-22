@@ -4,19 +4,14 @@ use std::fmt;
 
 use crate::db::{AnswerRepo, CommunityRepo, JoinRequestRepo, SessionRepo};
 use crate::domain::{
-    ApplicantSession, CommunityQuestion, JoinRequest, JoinRequestStatus, SessionState,
+    ApplicantSession, CommunityQuestion, JoinRequest, JoinRequestStatus, SessionState, Language,
 };
 use crate::error::AppError;
+use crate::messages::Messages;
 
 const LOW_EFFORT_ANSWERS: &[&str] = &[
     ".", "..", "x", "xx", "test", "asdf", "123", "aaa", "-", "no", "n/a",
 ];
-
-const REQUIRED_ERROR_MESSAGE: &str = "This question is required. Please provide an answer.";
-const TOO_SHORT_ERROR_MESSAGE: &str =
-    "Please provide a more detailed answer (at least a few words).";
-const LOW_EFFORT_ERROR_MESSAGE: &str =
-    "Please provide a genuine answer so moderators can review your application.";
 
 #[derive(Debug, Clone)]
 pub enum AnswerValidationError {
@@ -26,18 +21,18 @@ pub enum AnswerValidationError {
 }
 
 impl AnswerValidationError {
-    pub fn message(&self) -> &'static str {
+    pub fn message(&self, language: Language) -> String {
         match self {
-            Self::Required => REQUIRED_ERROR_MESSAGE,
-            Self::TooShort => TOO_SHORT_ERROR_MESSAGE,
-            Self::LowEffort => LOW_EFFORT_ERROR_MESSAGE,
+            Self::Required => Messages::required_field_error(language),
+            Self::TooShort => Messages::min_length_error(language),
+            Self::LowEffort => Messages::low_effort_error(language),
         }
     }
 }
 
 impl fmt::Display for AnswerValidationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.message())
+        write!(f, "{}", self.message(Language::English))
     }
 }
 
@@ -51,7 +46,7 @@ pub enum QuestionnaireStep {
 
 #[derive(Debug, Clone)]
 pub enum ProcessAnswerResult {
-    ValidationFailed { message: &'static str },
+    ValidationFailed { message: String },
     Advanced { step: QuestionnaireStep },
 }
 
@@ -82,12 +77,14 @@ struct ActiveQuestionnaireRow {
     session_join_request_id: i64,
     session_current_question_position: i32,
     session_state: SessionState,
+    session_language: Language,
     session_created_at: DateTime<Utc>,
     session_updated_at: DateTime<Utc>,
     question_id: i64,
     question_community_id: i64,
     question_key: String,
     question_text: String,
+    question_text_uk: String,
     question_required: bool,
     question_position: i32,
     question_is_active: bool,
@@ -98,6 +95,7 @@ struct ActiveQuestionnaireRow {
 pub fn validate_answer(
     answer: &str,
     required: bool,
+    _language: Language,
 ) -> Result<String, AnswerValidationError> {
     let trimmed = answer.trim();
 
@@ -145,12 +143,14 @@ pub async fn find_active_context_by_telegram_user_id(
                 s.join_request_id AS session_join_request_id,
                 s.current_question_position AS session_current_question_position,
                 s.state AS session_state,
+                s.language AS session_language,
                 s.created_at AS session_created_at,
                 s.updated_at AS session_updated_at,
                 q.id AS question_id,
                 q.community_id AS question_community_id,
                 q.question_key AS question_key,
                 q.question_text AS question_text,
+                q.question_text_uk AS question_text_uk,
                 q.required AS question_required,
                 q.position AS question_position,
                 q.is_active AS question_is_active,
@@ -197,6 +197,7 @@ pub async fn find_active_context_by_telegram_user_id(
             join_request_id: row.session_join_request_id,
             current_question_position: row.session_current_question_position,
             state: row.session_state,
+            language: row.session_language,
             created_at: row.session_created_at,
             updated_at: row.session_updated_at,
         },
@@ -205,6 +206,7 @@ pub async fn find_active_context_by_telegram_user_id(
             community_id: row.question_community_id,
             question_key: row.question_key,
             question_text: row.question_text,
+            question_text_uk: row.question_text_uk,
             required: row.question_required,
             position: row.question_position,
             is_active: row.question_is_active,
@@ -219,11 +221,11 @@ pub async fn process_answer(
     context: ActiveQuestionnaireContext,
     answer_text: &str,
 ) -> Result<ProcessAnswerResult, AppError> {
-    let validated_answer = match validate_answer(answer_text, context.current_question.required) {
+    let validated_answer = match validate_answer(answer_text, context.current_question.required, context.session.language) {
         Ok(answer) => answer,
         Err(err) => {
             return Ok(ProcessAnswerResult::ValidationFailed {
-                message: err.message(),
+                message: err.message(context.session.language),
             });
         }
     };

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO applicant_sessions (join_request_id, current_question_position)\n             VALUES ($1, $2)\n             RETURNING id, join_request_id, current_question_position,\n                 state as \"state: SessionState\",\n                 created_at, updated_at",
+  "query": "INSERT INTO applicant_sessions (join_request_id, current_question_position, language)\n             VALUES ($1, $2, $3)\n             RETURNING id, join_request_id, current_question_position,\n                 state as \"state: SessionState\",\n                 language as \"language: Language\",\n                 created_at, updated_at",
   "describe": {
     "columns": [
       {
@@ -25,11 +25,16 @@
       },
       {
         "ordinal": 4,
+        "name": "language: Language",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
@@ -37,7 +42,8 @@
     "parameters": {
       "Left": [
         "Int8",
-        "Int4"
+        "Int4",
+        "Varchar"
       ]
     },
     "nullable": [
@@ -46,8 +52,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "f31191fda18c0f4a726d71c91bf1ec23bc32eec1c39415b3ae507434713d3c97"
+  "hash": "4d9eb9fb7a49a190ce76247ddd01b55a7bf06a1256c86cecddcc833d3c97d52c"
 }

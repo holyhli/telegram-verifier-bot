@@ -40,13 +40,15 @@ slug = "test-community"
 
 [[communities.questions]]
 key = "name"
-text = "What is your name?"
+text_en = "What is your name?"
+text_uk = "Як вас звати?"
 required = true
 position = 1
 
 [[communities.questions]]
 key = "reason"
-text = "Why do you want to join?"
+text_en = "Why do you want to join?"
+text_uk = "Чому ви хочете приєднатися?"
 required = true
 position = 2
 "#;
@@ -98,7 +100,8 @@ slug = "same-slug"
 
 [[communities.questions]]
 key = "q1"
-text = "Question?"
+text_en = "Question?"
+text_uk = "Питання?"
 required = true
 position = 1
 
@@ -109,7 +112,8 @@ slug = "same-slug"
 
 [[communities.questions]]
 key = "q1"
-text = "Question?"
+text_en = "Question?"
+text_uk = "Питання?"
 required = true
 position = 1
 "#;
@@ -142,13 +146,15 @@ slug = "test"
 
 [[communities.questions]]
 key = "q1"
-text = "First?"
+text_en = "First?"
+text_uk = "Перше?"
 required = true
 position = 1
 
 [[communities.questions]]
 key = "q2"
-text = "Third?"
+text_en = "Third?"
+text_uk = "Третє?"
 required = true
 position = 3
 "#;
@@ -224,7 +230,8 @@ slug = "minimal"
 
 [[communities.questions]]
 key = "q1"
-text = "Question?"
+text_en = "Question?"
+text_uk = "Питання?"
 required = true
 position = 1
 "#;
@@ -273,6 +280,133 @@ application_timeout_minutes = 30
             assert!(
                 errors.iter().any(|e| e.contains("at least one community")),
                 "expected empty communities error, got: {errors:?}"
+            );
+        }
+        other => panic!("expected Validation error, got: {other}"),
+    }
+}
+
+#[test]
+fn config_rejects_missing_ukrainian_text() {
+    let _lock = ENV_LOCK.lock().unwrap();
+    clear_env_vars();
+    set_required_env_vars();
+
+    let toml_missing_uk = r#"
+[[communities]]
+telegram_chat_id = -1001234567890
+title = "Test"
+slug = "test"
+
+[[communities.questions]]
+key = "q1"
+text_en = "What is your name?"
+required = true
+position = 1
+"#;
+
+    let err = Config::load_from_env_and_toml(Some(toml_missing_uk)).unwrap_err();
+    // Should fail during TOML parsing because text_uk field is missing
+    assert!(
+        matches!(err, ConfigError::TomlParseError(_)),
+        "expected TomlParseError for missing text_uk field, got: {err}"
+    );
+}
+
+#[test]
+fn config_rejects_empty_ukrainian_text() {
+    let _lock = ENV_LOCK.lock().unwrap();
+    clear_env_vars();
+    set_required_env_vars();
+
+    let toml_empty_uk = r#"
+[[communities]]
+telegram_chat_id = -1001234567890
+title = "Test"
+slug = "test"
+
+[[communities.questions]]
+key = "q1"
+text_en = "What is your name?"
+text_uk = ""
+required = true
+position = 1
+"#;
+
+    let err = Config::load_from_env_and_toml(Some(toml_empty_uk)).unwrap_err();
+    match err {
+        ConfigError::Validation(errors) => {
+            assert!(
+                errors.iter().any(|e| e.contains("empty Ukrainian text")),
+                "expected empty Ukrainian text error, got: {errors:?}"
+            );
+        }
+        other => panic!("expected Validation error, got: {other}"),
+    }
+}
+
+#[test]
+fn config_rejects_empty_english_text() {
+    let _lock = ENV_LOCK.lock().unwrap();
+    clear_env_vars();
+    set_required_env_vars();
+
+    let toml_empty_en = r#"
+[[communities]]
+telegram_chat_id = -1001234567890
+title = "Test"
+slug = "test"
+
+[[communities.questions]]
+key = "q1"
+text_en = ""
+text_uk = "Як вас звати?"
+required = true
+position = 1
+"#;
+
+    let err = Config::load_from_env_and_toml(Some(toml_empty_en)).unwrap_err();
+    match err {
+        ConfigError::Validation(errors) => {
+            assert!(
+                errors.iter().any(|e| e.contains("empty English text")),
+                "expected empty English text error, got: {errors:?}"
+            );
+        }
+        other => panic!("expected Validation error, got: {other}"),
+    }
+}
+
+#[test]
+fn config_rejects_whitespace_only_text() {
+    let _lock = ENV_LOCK.lock().unwrap();
+    clear_env_vars();
+    set_required_env_vars();
+
+    let toml_whitespace = r#"
+[[communities]]
+telegram_chat_id = -1001234567890
+title = "Test"
+slug = "test"
+
+[[communities.questions]]
+key = "q1"
+text_en = "   "
+text_uk = "  "
+required = true
+position = 1
+"#;
+
+    let err = Config::load_from_env_and_toml(Some(toml_whitespace)).unwrap_err();
+    match err {
+        ConfigError::Validation(errors) => {
+            assert!(
+                errors.iter().any(|e| e.contains("empty English text")),
+                "expected empty English text error, got: {errors:?}"
+            );
+            assert!(
+                errors.iter().any(|e| e.contains("empty Ukrainian text")),
+                "expected empty Ukrainian text error, got: {errors:?}"
             );
         }
         other => panic!("expected Validation error, got: {other}"),

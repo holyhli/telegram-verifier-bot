@@ -4,7 +4,7 @@ use teloxide::prelude::Bot;
 use teloxide::types::Message;
 
 use crate::db::{JoinRequestRepo, SessionRepo};
-use crate::domain::JoinRequestStatus;
+use crate::domain::{JoinRequestStatus, Language};
 use crate::error::AppError;
 
 use super::{TelegramApi, TeloxideApi};
@@ -71,7 +71,7 @@ pub async fn process_start(
         .await?
         .is_none()
     {
-        SessionRepo::create(pool, pending.join_request_id, 1).await?;
+        SessionRepo::create(pool, pending.join_request_id, 1, Language::English).await?;
     }
 
     let _updated = JoinRequestRepo::update_status(

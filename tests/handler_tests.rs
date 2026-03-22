@@ -6,14 +6,16 @@ use teloxide::ApiError;
 use teloxide::RequestError;
 use teloxide::types::InlineKeyboardMarkup;
 use verifier_bot::bot::handlers::join_request::{process_join_request, JoinRequestInput};
+use verifier_bot::bot::handlers::language_selection::process_language_selection_callback;
 use verifier_bot::bot::handlers::start::{process_start, StartInput};
 use verifier_bot::bot::handlers::TelegramApi;
 use verifier_bot::db::{JoinRequestRepo, SessionRepo};
-use verifier_bot::domain::JoinRequestStatus;
+use verifier_bot::domain::{JoinRequestStatus, Language};
 
 #[derive(Debug, Clone)]
 struct FakeTelegramApi {
     sent_messages: Arc<Mutex<Vec<(i64, String)>>>,
+    keyboards_sent: Arc<Mutex<Vec<(i64, String, Vec<Vec<(String, String)>>)>>>,
     declined_requests: Arc<Mutex<Vec<(i64, i64)>>>,
     send_error: Arc<Mutex<Option<RequestError>>>,
 }
@@ -22,6 +24,7 @@ impl FakeTelegramApi {
     fn new() -> Self {
         Self {
             sent_messages: Arc::new(Mutex::new(Vec::new())),
+            keyboards_sent: Arc::new(Mutex::new(Vec::new())),
             declined_requests: Arc::new(Mutex::new(Vec::new())),
             send_error: Arc::new(Mutex::new(None)),
         }
@@ -37,6 +40,13 @@ impl FakeTelegramApi {
         self.sent_messages
             .lock()
             .expect("lock sent_messages")
+            .clone()
+    }
+
+    fn keyboards_sent(&self) -> Vec<(i64, String, Vec<Vec<(String, String)>>)> {
+        self.keyboards_sent
+            .lock()
+            .expect("lock keyboards_sent")
             .clone()
     }
 
@@ -115,6 +125,27 @@ impl TelegramApi for FakeTelegramApi {
     ) -> Result<(), RequestError> {
         Ok(())
     }
+
+    async fn send_message_with_inline_keyboard(
+        &self,
+        chat_id: i64,
+        text: String,
+        keyboard: Vec<Vec<(String, String)>>,
+    ) -> Result<(), RequestError> {
+        if let Some(err) = self.send_error.lock().expect("lock send_error").clone() {
+            return Err(err);
+        }
+
+        self.keyboards_sent
+            .lock()
+            .expect("lock keyboards_sent")
+            .push((chat_id, text.clone(), keyboard));
+        self.sent_messages
+            .lock()
+            .expect("lock sent_messages")
+            .push((chat_id, text));
+        Ok(())
+    }
 }
 
 async fn seed_community(pool: &PgPool, chat_id: i64, slug: &str) -> i64 {
@@ -131,11 +162,12 @@ async fn seed_community(pool: &PgPool, chat_id: i64, slug: &str) -> i64 {
 
 async fn seed_question(pool: &PgPool, community_id: i64, text: &str) {
     sqlx::query(
-        "INSERT INTO community_questions (community_id, question_key, question_text, required, position)
-         VALUES ($1, 'q1', $2, TRUE, 1)",
+        "INSERT INTO community_questions (community_id, question_key, question_text, question_text_uk, required, position)
+         VALUES ($1, 'q1', $2, $3, TRUE, 1)",
     )
     .bind(community_id)
     .bind(text)
+    .bind(format!("{} (Ukrainian)", text))
     .execute(pool)
     .await
     .expect("seed question");
@@ -166,9 +198,7 @@ fn sample_join_request_input(community_chat_id: i64) -> JoinRequestInput {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-async fn handle_join_request_creates_join_request_session_and_sends_message(
-    pool: PgPool,
-) -> sqlx::Result<()> {
+async fn handle_join_request_sends_language_selection(pool: PgPool) -> sqlx::Result<()> {
     let community_id = seed_community(&pool, -1009000000001, "handler-test-1").await;
     seed_question(&pool, community_id, "What do you build?").await;
 
@@ -177,20 +207,34 @@ async fn handle_join_request_creates_join_request_session_and_sends_message(
         .await
         .expect("process join request");
 
-    let sent = api.sent_messages();
-    assert_eq!(sent.len(), 1);
-    assert!(sent[0].1.contains("What do you build?"));
+    // Verify keyboard was sent
+    let keyboards = api.keyboards_sent();
+    assert_eq!(keyboards.len(), 1);
+    let (chat_id, text, keyboard) = &keyboards[0];
+    assert_eq!(*chat_id, 123_456);
+    assert!(text.contains("Alice"));
+    assert!(text.contains("Community A"));
 
+    // Verify keyboard structure
+    assert_eq!(keyboard.len(), 1); // One row
+    assert_eq!(keyboard[0].len(), 2); // Two buttons
+    assert_eq!(keyboard[0][0].0, "🇬🇧 English");
+    assert_eq!(keyboard[0][0].1, "lang:en");
+    assert_eq!(keyboard[0][1].0, "🇺🇦 Українська");
+    assert_eq!(keyboard[0][1].1, "lang:uk");
+
+    // Verify join request created but status remains PendingContact
     let join_requests: Vec<(String,)> = sqlx::query_as("SELECT status::text FROM join_requests")
         .fetch_all(&pool)
         .await?;
     assert_eq!(join_requests.len(), 1);
-    assert_eq!(join_requests[0].0, "questionnaire_in_progress");
+    assert_eq!(join_requests[0].0, "pending_contact");
 
+    // Verify NO session created yet
     let session_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM applicant_sessions")
         .fetch_one(&pool)
         .await?;
-    assert_eq!(session_count.0, 1);
+    assert_eq!(session_count.0, 0);
 
     Ok(())
 }
@@ -347,6 +391,216 @@ async fn join_request_blocked_user_marks_request_cancelled(pool: PgPool) -> sqlx
         .fetch_all(&pool)
         .await?;
     assert_eq!(statuses, vec![("cancelled".to_string(),)]);
+
+    Ok(())
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn language_selection_en_creates_session_and_sends_question(
+    pool: PgPool,
+) -> sqlx::Result<()> {
+    let community_id = seed_community(&pool, -1009000000010, "lang-test-1").await;
+    seed_question(&pool, community_id, "What do you build?").await;
+
+    let applicant_id: i64 = sqlx::query_scalar(
+        "INSERT INTO applicants (telegram_user_id, first_name) VALUES (123456, 'Alice') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await?;
+
+    let join_request_id: i64 = sqlx::query_scalar(
+        "INSERT INTO join_requests (community_id, applicant_id, telegram_user_chat_id, telegram_join_request_date, status)
+         VALUES ($1, $2, 123456, NOW(), 'pending_contact') RETURNING id",
+    )
+    .bind(community_id)
+    .bind(applicant_id)
+    .fetch_one(&pool)
+    .await?;
+
+    let api = FakeTelegramApi::new();
+    process_language_selection_callback(
+        &api,
+        &pool,
+        "callback_123".to_string(),
+        123456,
+        123456,
+        "lang:en".to_string(),
+    )
+    .await
+    .expect("language selection should succeed");
+
+    let sent = api.sent_messages();
+    assert_eq!(sent.len(), 1);
+    assert_eq!(sent[0].0, 123456);
+    assert!(sent[0].1.contains("Hi Alice!"));
+    assert!(sent[0].1.contains("What do you build?"));
+    assert!(!sent[0].1.contains("Ukrainian"));
+
+    let session = SessionRepo::find_active_by_join_request_id(&pool, join_request_id)
+        .await
+        .expect("find session")
+        .expect("session should exist");
+    assert_eq!(session.current_question_position, 1);
+    assert_eq!(session.language, Language::English);
+
+    let jr = JoinRequestRepo::find_by_id(&pool, join_request_id)
+        .await
+        .expect("find join request")
+        .expect("join request should exist");
+    assert_eq!(jr.status, JoinRequestStatus::QuestionnaireInProgress);
+
+    Ok(())
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn language_selection_uk_creates_session_and_sends_question(
+    pool: PgPool,
+) -> sqlx::Result<()> {
+    let community_id = seed_community(&pool, -1009000000011, "lang-test-2").await;
+    seed_question(&pool, community_id, "What do you build?").await;
+
+    let applicant_id: i64 = sqlx::query_scalar(
+        "INSERT INTO applicants (telegram_user_id, first_name) VALUES (234567, 'Олена') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await?;
+
+    let join_request_id: i64 = sqlx::query_scalar(
+        "INSERT INTO join_requests (community_id, applicant_id, telegram_user_chat_id, telegram_join_request_date, status)
+         VALUES ($1, $2, 234567, NOW(), 'pending_contact') RETURNING id",
+    )
+    .bind(community_id)
+    .bind(applicant_id)
+    .fetch_one(&pool)
+    .await?;
+
+    let api = FakeTelegramApi::new();
+    process_language_selection_callback(
+        &api,
+        &pool,
+        "callback_456".to_string(),
+        234567,
+        234567,
+        "lang:uk".to_string(),
+    )
+    .await
+    .expect("language selection should succeed");
+
+    let sent = api.sent_messages();
+    assert_eq!(sent.len(), 1);
+    assert_eq!(sent[0].0, 234567);
+    assert!(sent[0].1.contains("Привіт, Олена!"));
+    assert!(sent[0].1.contains("What do you build? (Ukrainian)"));
+
+    let session = SessionRepo::find_active_by_join_request_id(&pool, join_request_id)
+        .await
+        .expect("find session")
+        .expect("session should exist");
+    assert_eq!(session.current_question_position, 1);
+    assert_eq!(session.language, Language::Ukrainian);
+
+    let jr = JoinRequestRepo::find_by_id(&pool, join_request_id)
+        .await
+        .expect("find join request")
+        .expect("join request should exist");
+    assert_eq!(jr.status, JoinRequestStatus::QuestionnaireInProgress);
+
+    Ok(())
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn language_selection_invalid_code_returns_error(pool: PgPool) -> sqlx::Result<()> {
+    let community_id = seed_community(&pool, -1009000000012, "lang-test-3").await;
+    seed_question(&pool, community_id, "Question").await;
+
+    let applicant_id: i64 = sqlx::query_scalar(
+        "INSERT INTO applicants (telegram_user_id, first_name) VALUES (345678, 'Bob') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await?;
+
+    sqlx::query(
+        "INSERT INTO join_requests (community_id, applicant_id, telegram_user_chat_id, telegram_join_request_date, status)
+         VALUES ($1, $2, 345678, NOW(), 'pending_contact')",
+    )
+    .bind(community_id)
+    .bind(applicant_id)
+    .execute(&pool)
+    .await?;
+
+    let api = FakeTelegramApi::new();
+    let result = process_language_selection_callback(
+        &api,
+        &pool,
+        "callback_789".to_string(),
+        345678,
+        345678,
+        "lang:fr".to_string(),
+    )
+    .await;
+
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("Unknown language code"));
+
+    Ok(())
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn language_selection_no_join_request_returns_error(pool: PgPool) -> sqlx::Result<()> {
+    let api = FakeTelegramApi::new();
+    let result = process_language_selection_callback(
+        &api,
+        &pool,
+        "callback_999".to_string(),
+        999999,
+        999999,
+        "lang:en".to_string(),
+    )
+    .await;
+
+    assert!(result.is_err());
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("No active join request found"));
+
+    Ok(())
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn language_selection_wrong_status_returns_error(pool: PgPool) -> sqlx::Result<()> {
+    let community_id = seed_community(&pool, -1009000000013, "lang-test-4").await;
+    seed_question(&pool, community_id, "Question").await;
+
+    let applicant_id: i64 = sqlx::query_scalar(
+        "INSERT INTO applicants (telegram_user_id, first_name) VALUES (456789, 'Charlie') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await?;
+
+    sqlx::query(
+        "INSERT INTO join_requests (community_id, applicant_id, telegram_user_chat_id, telegram_join_request_date, status)
+         VALUES ($1, $2, 456789, NOW(), 'submitted')",
+    )
+    .bind(community_id)
+    .bind(applicant_id)
+    .execute(&pool)
+    .await?;
+
+    let api = FakeTelegramApi::new();
+    let result = process_language_selection_callback(
+        &api,
+        &pool,
+        "callback_111".to_string(),
+        456789,
+        456789,
+        "lang:en".to_string(),
+    )
+    .await;
+
+    assert!(result.is_err());
+    let err_msg = result.unwrap_err().to_string();
+    assert!(err_msg.contains("Invalid state transition") || err_msg.contains("submitted"));
 
     Ok(())
 }

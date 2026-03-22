@@ -5,6 +5,7 @@ A production-ready Telegram bot built in Rust that automates community join requ
 ## Features
 
 - **Multi-Community Support**: Single bot handles multiple Telegram communities with custom questionnaires per community
+- **Bilingual Support**: Full English and Ukrainian language support with user-selectable language preference
 - **Automated Questionnaire Flow**: Private one-on-one questioning with answer validation and anti-spam protection
 - **Moderator Review**: Inline button interface for approve/reject/ban decisions with double-processing protection
 - **Blacklist Management**: Global and community-scoped blacklists with automatic decline
@@ -12,6 +13,30 @@ A production-ready Telegram bot built in Rust that automates community join requ
 - **Audit Trail**: Complete moderation action history stored in PostgreSQL
 - **Dual Deployment Modes**: Long polling (default) or webhook mode for production
 - **Docker Ready**: Multi-stage Dockerfile with cargo-chef for fast rebuilds
+
+## Language Support
+
+The bot provides full bilingual support for English and Ukrainian:
+
+- **User Language Selection**: When users request to join a community, they're presented with a language selection interface (🇬🇧 English / 🇺🇦 Українська)
+- **Localized Questions**: All questionnaire questions are configured with both English (`text_en`) and Ukrainian (`text_uk`) versions
+- **Localized Messages**: Welcome messages, validation errors, and completion messages appear in the user's selected language
+- **Persistent Language Preference**: Language selection is stored per session and used throughout the entire questionnaire flow
+
+### Configuring Bilingual Questions
+
+In `config.toml`, each question requires both language versions:
+
+```toml
+[[communities.questions]]
+key = "name"
+text_en = "What is your name?"
+text_uk = "Як вас звати?"
+required = true
+position = 1
+```
+
+Both `text_en` and `text_uk` fields are required and must be non-empty. The bot will validate this on startup.
 
 ## Prerequisites
 
@@ -116,19 +141,22 @@ slug = "defi-amsterdam"
 
 [[communities.questions]]
 key = "name"
-text = "What is your name?"
+text_en = "What is your name?"
+text_uk = "Як вас звати?"
 required = true
 position = 1
 
 [[communities.questions]]
 key = "occupation"
-text = "What do you do / where do you work?"
+text_en = "What do you do / where do you work?"
+text_uk = "Чим ви займаєтесь / де ви працюєте?"
 required = true
 position = 2
 
 [[communities.questions]]
 key = "referral"
-text = "How did you hear about us?"
+text_en = "How did you hear about us?"
+text_uk = "Як ви про нас дізналися?"
 required = false
 position = 3
 ```
@@ -149,10 +177,11 @@ curl http://localhost:8080/health
 ### 5. Test the Flow
 
 1. Request to join one of your configured communities
-2. Bot should message you privately with the first question
-3. Answer all questions
-4. Moderator chat receives a card with your answers
-5. Moderator clicks approve/reject/ban
+2. Bot messages you privately with language selection (🇬🇧 English / 🇺🇦 Українська)
+3. Select your preferred language
+4. Answer all questions in your selected language
+5. Moderator chat receives a card with your answers
+6. Moderator clicks approve/reject/ban
 
 ## Development Setup
 
@@ -227,10 +256,11 @@ telegram_chat_id = -1001234567890  # Community chat ID
 title = "Community Name"            # Display name
 slug = "community-slug"             # Unique identifier
 
-# Questions for this community
+# Questions for this community (bilingual)
 [[communities.questions]]
 key = "unique_key"                  # Unique within community
-text = "Question text?"             # What to ask
+text_en = "Question text?"          # English version
+text_uk = "Текст питання?"          # Ukrainian version
 required = true                     # Whether answer is required
 position = 1                        # Order (must be 1, 2, 3, ... with no gaps)
 ```
@@ -239,6 +269,7 @@ position = 1                        # Order (must be 1, 2, 3, ... with no gaps)
 - Question positions must be contiguous (1, 2, 3, ...) with no gaps
 - Question keys must be unique within each community
 - Community slugs must be unique across all communities
+- Both `text_en` and `text_uk` are required for all questions and must be non-empty
 
 ## Architecture
 

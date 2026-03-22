@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE applicant_sessions\n             SET state = 'completed', updated_at = NOW()\n             WHERE id = $1 AND state = 'awaiting_answer'\n             RETURNING id, join_request_id, current_question_position,\n                 state as \"state: SessionState\",\n                 created_at, updated_at",
+  "query": "SELECT id, telegram_chat_id, title, slug, is_active, created_at, updated_at\n             FROM communities WHERE id = $1",
   "describe": {
     "columns": [
       {
@@ -10,26 +10,31 @@
       },
       {
         "ordinal": 1,
-        "name": "join_request_id",
+        "name": "telegram_chat_id",
         "type_info": "Int8"
       },
       {
         "ordinal": 2,
-        "name": "current_question_position",
-        "type_info": "Int4"
+        "name": "title",
+        "type_info": "Text"
       },
       {
         "ordinal": 3,
-        "name": "state: SessionState",
+        "name": "slug",
         "type_info": "Text"
       },
       {
         "ordinal": 4,
+        "name": "is_active",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 5,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
@@ -45,8 +50,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "be70b6fb97ab727100c57d9fa03e46b25ecb61f1055ee3ad5820d21a2112944b"
+  "hash": "559e99b67970391e04a87c618daf547878be110bab5166957f58e133fba39507"
 }

@@ -4,4 +4,5 @@ pub mod db;
 pub mod domain;
 pub mod error;
 pub mod logging;
+pub mod messages;
 pub mod services;

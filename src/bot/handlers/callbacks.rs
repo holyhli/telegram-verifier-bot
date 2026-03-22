@@ -14,7 +14,7 @@ use crate::services::moderator::{
     load_moderator_card_answers, load_moderator_card_context, render_moderator_card,
 };
 
-use super::{TelegramApi, TeloxideApi};
+use super::{language_selection, TelegramApi, TeloxideApi};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CallbackAction {
@@ -52,8 +52,26 @@ pub async fn handle_callback_query(
     pool: PgPool,
     config: Arc<Config>,
 ) -> Result<(), AppError> {
-    let regular_message = query.regular_message().cloned();
     let callback_data = query.data.clone();
+    let api = TeloxideApi::new(bot);
+
+    if let Some(ref data) = callback_data {
+        if data.starts_with("lang:") {
+            let telegram_user_id = query.from.id.0 as i64;
+            let user_chat_id = query.from.id.0 as i64;
+            return language_selection::process_language_selection_callback(
+                &api,
+                &pool,
+                query.id.to_string(),
+                telegram_user_id,
+                user_chat_id,
+                data.clone(),
+            )
+            .await;
+        }
+    }
+
+    let regular_message = query.regular_message().cloned();
     let moderator_id = query.from.id.0 as i64;
     let input = CallbackActionInput {
         callback_query_id: query.id.to_string(),
@@ -63,7 +81,6 @@ pub async fn handle_callback_query(
         message_id: regular_message.as_ref().map(|message| message.id.0 as i64),
     };
 
-    let api = TeloxideApi::new(bot);
     process_callback_query(&api, &pool, &config, input).await
 }
 

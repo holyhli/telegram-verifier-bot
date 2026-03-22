@@ -1,7 +1,7 @@
 use sqlx::PgPool;
 
 #[allow(unused_imports)]
-use crate::domain::SessionState;
+use crate::domain::{SessionState, Language};
 use crate::domain::ApplicantSession;
 use crate::error::AppError;
 
@@ -12,16 +12,19 @@ impl SessionRepo {
         pool: &PgPool,
         join_request_id: i64,
         current_question_position: i32,
+        language: Language,
     ) -> Result<ApplicantSession, AppError> {
         let session = sqlx::query_as!(
             ApplicantSession,
-            r#"INSERT INTO applicant_sessions (join_request_id, current_question_position)
-             VALUES ($1, $2)
+            r#"INSERT INTO applicant_sessions (join_request_id, current_question_position, language)
+             VALUES ($1, $2, $3)
              RETURNING id, join_request_id, current_question_position,
                  state as "state: SessionState",
+                 language as "language: Language",
                  created_at, updated_at"#,
             join_request_id,
             current_question_position,
+            language.code(),
         )
         .fetch_one(pool)
         .await?;
@@ -37,6 +40,7 @@ impl SessionRepo {
             ApplicantSession,
             r#"SELECT id, join_request_id, current_question_position,
                  state as "state: SessionState",
+                 language as "language: Language",
                  created_at, updated_at
              FROM applicant_sessions
              WHERE join_request_id = $1 AND state = 'awaiting_answer'"#,
@@ -60,6 +64,7 @@ impl SessionRepo {
              WHERE id = $1 AND state = 'awaiting_answer'
              RETURNING id, join_request_id, current_question_position,
                  state as "state: SessionState",
+                 language as "language: Language",
                  created_at, updated_at"#,
             id,
             new_position,
@@ -81,6 +86,7 @@ impl SessionRepo {
              WHERE id = $1 AND state = 'awaiting_answer'
              RETURNING id, join_request_id, current_question_position,
                  state as "state: SessionState",
+                 language as "language: Language",
                  created_at, updated_at"#,
             id,
         )
@@ -101,6 +107,7 @@ impl SessionRepo {
              WHERE id = $1 AND state = 'awaiting_answer'
              RETURNING id, join_request_id, current_question_position,
                  state as "state: SessionState",
+                 language as "language: Language",
                  created_at, updated_at"#,
             id,
         )

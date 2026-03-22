@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, community_id, question_key, question_text, required, position, is_active, created_at, updated_at\n             FROM community_questions\n             WHERE community_id = $1 AND is_active = TRUE\n             ORDER BY position ASC",
+  "query": "SELECT id, community_id, question_key, question_text, question_text_uk, required, position, is_active, created_at, updated_at\n             FROM community_questions\n             WHERE community_id = $1 AND is_active = TRUE\n             ORDER BY position ASC",
   "describe": {
     "columns": [
       {
@@ -25,26 +25,31 @@
       },
       {
         "ordinal": 4,
+        "name": "question_text_uk",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
         "name": "required",
         "type_info": "Bool"
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "position",
         "type_info": "Int4"
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "is_active",
         "type_info": "Bool"
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
@@ -63,8 +68,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "2c40cea8774ecb07d26e764f5d8498cd466e9e2127a1797c124604e3037f9f3a"
+  "hash": "6a64784c7d486dc475429aae041dc6c1fbf54abb9913ce44d479f951a04899ee"
 }

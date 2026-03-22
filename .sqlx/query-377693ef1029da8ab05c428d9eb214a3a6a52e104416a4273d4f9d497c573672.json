@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, join_request_id, current_question_position,\n                 state as \"state: SessionState\",\n                 created_at, updated_at\n             FROM applicant_sessions\n             WHERE join_request_id = $1 AND state = 'awaiting_answer'",
+  "query": "UPDATE applicant_sessions\n             SET current_question_position = $2, updated_at = NOW()\n             WHERE id = $1 AND state = 'awaiting_answer'\n             RETURNING id, join_request_id, current_question_position,\n                 state as \"state: SessionState\",\n                 language as \"language: Language\",\n                 created_at, updated_at",
   "describe": {
     "columns": [
       {
@@ -25,18 +25,24 @@
       },
       {
         "ordinal": 4,
+        "name": "language: Language",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
     ],
     "parameters": {
       "Left": [
-        "Int8"
+        "Int8",
+        "Int4"
       ]
     },
     "nullable": [
@@ -45,8 +51,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "46bff66bd8416648e685148c8cf4122625ae339f645c49c54e4c981ca56b08b6"
+  "hash": "377693ef1029da8ab05c428d9eb214a3a6a52e104416a4273d4f9d497c573672"
 }

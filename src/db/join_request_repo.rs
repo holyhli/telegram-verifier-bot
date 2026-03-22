@@ -54,6 +54,33 @@ impl JoinRequestRepo {
         Ok(jr)
     }
 
+    pub async fn find_active_by_telegram_user_id_and_chat_id(
+        pool: &PgPool,
+        telegram_user_id: i64,
+        user_chat_id: i64,
+    ) -> Result<Option<JoinRequest>, AppError> {
+        let jr = sqlx::query_as!(
+            JoinRequest,
+            r#"SELECT jr.id, jr.community_id, jr.applicant_id, jr.telegram_user_chat_id,
+                 jr.status as "status: JoinRequestStatus",
+                 jr.telegram_join_request_date, jr.submitted_to_moderators_at, jr.approved_at, jr.rejected_at,
+                 jr.moderator_message_chat_id, jr.moderator_message_id,
+                 jr.created_at, jr.updated_at, jr.reminder_sent_at
+             FROM join_requests jr
+             JOIN applicants a ON jr.applicant_id = a.id
+             WHERE a.telegram_user_id = $1 AND jr.telegram_user_chat_id = $2
+               AND jr.status NOT IN ('approved', 'rejected', 'banned', 'expired', 'cancelled')
+             ORDER BY jr.created_at DESC
+             LIMIT 1"#,
+            telegram_user_id,
+            user_chat_id,
+        )
+        .fetch_optional(pool)
+        .await?;
+
+        Ok(jr)
+    }
+
     pub async fn find_active_for_applicant_in_community(
         pool: &PgPool,
         applicant_id: i64,

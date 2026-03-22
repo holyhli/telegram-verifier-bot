@@ -7,7 +7,8 @@ use teloxide::types::InlineKeyboardMarkup;
 use verifier_bot::bot::handlers::questionnaire::{process_private_message, PrivateMessageInput};
 use verifier_bot::bot::handlers::TelegramApi;
 use verifier_bot::db::{JoinRequestRepo, SessionRepo};
-use verifier_bot::domain::JoinRequestStatus;
+use verifier_bot::domain::{JoinRequestStatus, Language};
+use verifier_bot::messages::Messages;
 use verifier_bot::services::questionnaire::validate_answer;
 
 #[derive(Debug, Clone)]
@@ -93,6 +94,19 @@ impl TelegramApi for FakeTelegramApi {
     ) -> Result<(), RequestError> {
         Ok(())
     }
+
+    async fn send_message_with_inline_keyboard(
+        &self,
+        chat_id: i64,
+        text: String,
+        _keyboard: Vec<Vec<(String, String)>>,
+    ) -> Result<(), RequestError> {
+        self.sent_messages
+            .lock()
+            .expect("lock sent_messages")
+            .push((chat_id, text));
+        Ok(())
+    }
 }
 
 async fn seed_community(pool: &PgPool, chat_id: i64, slug: &str) -> i64 {
@@ -163,7 +177,7 @@ async fn seed_active_questionnaire(
     .await
     .expect("transition to questionnaire_in_progress");
 
-    SessionRepo::create(pool, updated.id, 1)
+    SessionRepo::create(pool, updated.id, 1, Language::English)
         .await
         .expect("create active session");
 
@@ -180,52 +194,52 @@ fn sample_private_message_input(telegram_user_id: i64, text: &str) -> PrivateMes
 
 #[test]
 fn questionnaire_validate_answer_required_valid() {
-    let result = validate_answer("I build moderation bots", true);
+    let result = validate_answer("I build moderation bots", true, Language::English);
     assert!(result.is_ok());
     assert_eq!(result.expect("valid answer"), "I build moderation bots");
 }
 
 #[test]
 fn questionnaire_validate_answer_required_empty_rejected() {
-    let result = validate_answer("", true);
+    let result = validate_answer("", true, Language::English);
     assert_eq!(
         result.expect_err("empty answer must fail").to_string(),
-        "This question is required. Please provide an answer."
+        Messages::required_field_error(Language::English)
     );
 }
 
 #[test]
 fn questionnaire_validate_answer_required_whitespace_rejected() {
-    let result = validate_answer("   \n\t", true);
+    let result = validate_answer("   \n\t", true, Language::English);
     assert_eq!(
         result.expect_err("whitespace answer must fail").to_string(),
-        "This question is required. Please provide an answer."
+        Messages::required_field_error(Language::English)
     );
 }
 
 #[test]
 fn questionnaire_validate_answer_required_too_short_rejected() {
-    let result = validate_answer("a", true);
+    let result = validate_answer("a", true, Language::English);
     assert_eq!(
         result.expect_err("one-char answer must fail").to_string(),
-        "Please provide a more detailed answer (at least a few words)."
+        Messages::min_length_error(Language::English)
     );
 }
 
 #[test]
 fn questionnaire_validate_answer_low_effort_rejected_case_insensitive() {
-    let result = validate_answer("TeSt", true);
+    let result = validate_answer("TeSt", true, Language::English);
     assert_eq!(
         result
             .expect_err("low-effort answer must fail")
             .to_string(),
-        "Please provide a genuine answer so moderators can review your application."
+        Messages::low_effort_error(Language::English)
     );
 }
 
 #[test]
 fn questionnaire_validate_answer_optional_accepts_empty() {
-    let result = validate_answer("   ", false);
+    let result = validate_answer("   ", false, Language::English);
     assert!(result.is_ok());
     assert_eq!(result.expect("optional empty allowed"), "");
 }
@@ -297,7 +311,7 @@ async fn questionnaire_validation_failure_does_not_advance_or_store(pool: PgPool
     assert_eq!(sent.len(), 1);
     assert_eq!(
         sent[0].1,
-        "Please provide a genuine answer so moderators can review your application."
+        Messages::low_effort_error(Language::English)
     );
 
     Ok(())
@@ -334,7 +348,7 @@ async fn questionnaire_process_answer_completes_on_last_question(pool: PgPool) -
     assert_eq!(sent.len(), 2);
     assert_eq!(
         sent[0].1,
-        "Thanks — your application has been submitted to the moderators.\nYou'll be notified once a decision is made."
+        Messages::completion_message(Language::English)
     );
     assert!(sent[1].1.contains("<b>📋 New Join Request</b>"));
 
@@ -396,6 +410,122 @@ async fn questionnaire_out_of_order_no_session_is_ignored(pool: PgPool) -> sqlx:
         .await?;
     assert_eq!(answer_count, 0);
     assert!(api.sent_messages().is_empty());
+
+    Ok(())
+}
+
+#[test]
+fn questionnaire_validate_answer_ukrainian_required_empty_rejected() {
+    let result = validate_answer("", true, Language::Ukrainian);
+    let error = result.expect_err("empty answer must fail");
+    assert_eq!(
+        error.message(Language::Ukrainian),
+        Messages::required_field_error(Language::Ukrainian)
+    );
+}
+
+#[test]
+fn questionnaire_validate_answer_ukrainian_too_short_rejected() {
+    let result = validate_answer("a", true, Language::Ukrainian);
+    let error = result.expect_err("one-char answer must fail");
+    assert_eq!(
+        error.message(Language::Ukrainian),
+        Messages::min_length_error(Language::Ukrainian)
+    );
+}
+
+#[test]
+fn questionnaire_validate_answer_ukrainian_low_effort_rejected() {
+    let result = validate_answer("test", true, Language::Ukrainian);
+    let error = result.expect_err("low-effort answer must fail");
+    assert_eq!(
+        error.message(Language::Ukrainian),
+        Messages::low_effort_error(Language::Ukrainian)
+    );
+}
+
+async fn seed_active_questionnaire_with_language(
+    pool: &PgPool,
+    telegram_user_id: i64,
+    question_count: i32,
+    language: Language,
+) -> i64 {
+    let community_id = seed_community(
+        pool,
+        -100_990_000_0000 - telegram_user_id,
+        &format!("questionnaire-{telegram_user_id}"),
+    )
+    .await;
+    seed_questions(pool, community_id, question_count, true).await;
+
+    let applicant_id = seed_applicant(pool, telegram_user_id).await;
+    let join_request = JoinRequestRepo::create(pool, community_id, applicant_id, telegram_user_id, Utc::now())
+        .await
+        .expect("create join request");
+
+    let updated = JoinRequestRepo::update_status(
+        pool,
+        join_request.id,
+        JoinRequestStatus::PendingContact,
+        JoinRequestStatus::QuestionnaireInProgress,
+        join_request.updated_at,
+    )
+    .await
+    .expect("transition to questionnaire_in_progress");
+
+    SessionRepo::create(pool, updated.id, 1, language)
+        .await
+        .expect("create active session");
+
+    updated.id
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn questionnaire_ukrainian_validation_error_messages(pool: PgPool) -> sqlx::Result<()> {
+    let telegram_user_id = 55_100;
+    let _join_request_id = seed_active_questionnaire_with_language(&pool, telegram_user_id, 2, Language::Ukrainian).await;
+    let api = FakeTelegramApi::new();
+
+    process_private_message(
+        &api,
+        &pool,
+        sample_private_message_input(telegram_user_id, ""),
+        -100_123,
+    )
+    .await
+    .expect("validation failure should be handled");
+
+    let sent = api.sent_messages();
+    assert_eq!(sent.len(), 1);
+    assert_eq!(
+        sent[0].1,
+        Messages::required_field_error(Language::Ukrainian)
+    );
+
+    Ok(())
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn questionnaire_ukrainian_completion_message(pool: PgPool) -> sqlx::Result<()> {
+    let telegram_user_id = 55_101;
+    let _join_request_id = seed_active_questionnaire_with_language(&pool, telegram_user_id, 1, Language::Ukrainian).await;
+    let api = FakeTelegramApi::new();
+
+    process_private_message(
+        &api,
+        &pool,
+        sample_private_message_input(telegram_user_id, "Я можу допомогти іншим і ділитися знаннями."),
+        -100_123,
+    )
+    .await
+    .expect("last question should complete flow");
+
+    let sent = api.sent_messages();
+    assert_eq!(sent.len(), 2);
+    assert_eq!(
+        sent[0].1,
+        Messages::completion_message(Language::Ukrainian)
+    );
 
     Ok(())
 }

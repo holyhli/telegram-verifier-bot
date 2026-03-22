@@ -33,13 +33,15 @@ async fn sync_creates_communities_and_questions(pool: PgPool) -> sqlx::Result<()
         questions: vec![
             Question {
                 key: "name".into(),
-                text: "What is your name?".into(),
+                text_en: "What is your name?".into(),
+                text_uk: "Як вас звати?".into(),
                 required: true,
                 position: 1,
             },
             Question {
                 key: "reason".into(),
-                text: "Why do you want to join?".into(),
+                text_en: "Why do you want to join?".into(),
+                text_uk: "Чому ви хочете приєднатися?".into(),
                 required: false,
                 position: 2,
             },
@@ -75,7 +77,8 @@ async fn sync_updates_existing_community(pool: PgPool) -> sqlx::Result<()> {
         slug: "update-test".into(),
         questions: vec![Question {
             key: "q1".into(),
-            text: "Old question?".into(),
+            text_en: "Old question?".into(),
+            text_uk: "Старе питання?".into(),
             required: true,
             position: 1,
         }],
@@ -89,7 +92,8 @@ async fn sync_updates_existing_community(pool: PgPool) -> sqlx::Result<()> {
         slug: "update-test".into(),
         questions: vec![Question {
             key: "q1".into(),
-            text: "Updated question?".into(),
+            text_en: "Updated question?".into(),
+            text_uk: "Оновлене питання?".into(),
             required: false,
             position: 1,
         }],
@@ -128,13 +132,15 @@ async fn sync_deactivates_removed_questions(pool: PgPool) -> sqlx::Result<()> {
         questions: vec![
             Question {
                 key: "keep".into(),
-                text: "Keep this?".into(),
+                text_en: "Keep this?".into(),
+                text_uk: "Залишити це?".into(),
                 required: true,
                 position: 1,
             },
             Question {
                 key: "remove".into(),
-                text: "Remove this?".into(),
+                text_en: "Remove this?".into(),
+                text_uk: "Видалити це?".into(),
                 required: true,
                 position: 2,
             },
@@ -149,7 +155,8 @@ async fn sync_deactivates_removed_questions(pool: PgPool) -> sqlx::Result<()> {
         slug: "deactivate-test".into(),
         questions: vec![Question {
             key: "keep".into(),
-            text: "Keep this?".into(),
+            text_en: "Keep this?".into(),
+            text_uk: "Залишити це?".into(),
             required: true,
             position: 1,
         }],

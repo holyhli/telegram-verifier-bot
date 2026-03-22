@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO community_questions (community_id, question_key, question_text, question_text_uk, required, position, is_active)\n            VALUES ($1, $2, $3, $4, $5, $6, TRUE)\n            ON CONFLICT (community_id, question_key) WHERE is_active = TRUE\n            DO UPDATE\n                SET question_text = EXCLUDED.question_text,\n                    question_text_uk = EXCLUDED.question_text_uk,\n                    required = EXCLUDED.required,\n                    position = EXCLUDED.position,\n                    is_active = TRUE,\n                    updated_at = NOW()\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Text",
+        "Text",
+        "Bool",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a29229d68b94655080f4bda3354ba7a721927371d7d0346967e12edd0c2cbd45"
+}
