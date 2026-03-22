@@ -144,3 +144,28 @@ This file tracks conventions, patterns, and architectural decisions discovered d
 - `cargo sqlx prepare` must run AFTER migrations exist in the database — compile-time macros validate against live schema
 - `find_expired` cutoff logic: `created_at < cutoff` means cutoff must be MORE RECENT than records to find them (not older)
 - `SQLX_OFFLINE=true cargo build` works once `.sqlx/` cache is generated — all 24 new query metadata files cached
+
+## [2026-03-22] Task 4: Bot Dispatcher + Join Request Handler
+
+### Dispatcher Setup
+- `Dispatcher::builder` now wires three top-level branches: `chat_join_request`, private `message`, and `callback_query`
+- Race-condition prevention is enabled via `.distribution_function(|upd: &Update| upd.from().map(|user| user.id.0))`, so all updates for one user are serialized
+- Dependencies are injected with `teloxide::dptree::deps![pool, Arc::new(config)]` to make `PgPool` and runtime config available in handlers
+- Long polling uses explicit `allowed_updates` for `Message`, `CallbackQuery`, and `ChatJoinRequest`
+
+### Handler Patterns
+- Join request logic is split into teloxide adapter (`handle_join_request`) + testable core (`process_join_request`)
+- Flow order is: community lookup → blacklist check (+ decline) → applicant upsert → duplicate-active guard → create join request → send first message immediately → create session → status transition to `questionnaire_in_progress`
+- User-unreachable send failures (`BotBlocked`, `UserDeactivated`, `ChatNotFound`, or equivalent `Unknown` forbidden text) mark the join request `cancelled`; other send errors are logged and left `pending_contact`
+- `/start` fallback similarly uses thin adapter + core function, resumes only `pending_contact` requests, then creates session and transitions state
+- Logging uses structured fields (`join_request_id`, `community_id`, `telegram_user_id`) at success and failure points
+
+### Testing Approach
+- Added `tests/handler_tests.rs` with a `FakeTelegramApi` implementing a shared `TelegramApi` trait, so handlers are tested without real Telegram requests
+- Tests run as `#[sqlx::test]` integration tests against real schema and repos, while Telegram side effects are captured in memory
+- 7 scenarios covered: happy path creation, unknown community no-op, blacklist decline, duplicate idempotency, `/start` resume, `/start` generic reply, and blocked-user cancellation path
+
+### Gotchas Discovered
+- `teloxide::ApiError` is exported at crate root (`teloxide::ApiError`), not under `teloxide::types`
+- `update_listeners::polling_default` in 0.17 returns a ready listener future; for explicit `allowed_updates`, `Polling::builder(bot)` is the simpler path
+- `cargo test handler` can filter out all tests if names do not match as expected; using `cargo test --test handler_tests` is the reliable task-level check
