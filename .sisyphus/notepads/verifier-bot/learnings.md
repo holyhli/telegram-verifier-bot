@@ -103,3 +103,44 @@ This file tracks conventions, patterns, and architectural decisions discovered d
 - Constraint violations tested via `.is_err()` checks on query results
 - Error messages validated with `.to_string().contains()` for constraint name verification
 - All 7 tests independent — can run individually or as suite
+
+## [2026-03-22] Task 3: Domain Models + Repository Layer
+
+### Domain Model Decisions
+- 7 domain model files in `src/domain/` (community.rs has both Community + CommunityQuestion)
+- Enum derives: `Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, sqlx::Type`
+- Struct derives: `Debug, Clone, serde::Serialize, serde::Deserialize, sqlx::FromRow`
+- All enums use `#[sqlx(type_name = "text", rename_all = "snake_case")]` for TEXT column mapping
+- All enums implement `Display` returning the snake_case DB value
+
+### Repository Patterns
+- Repos are zero-sized structs with associated async functions taking `&PgPool` as first param
+- All return `Result<T, AppError>` — sqlx::Error auto-converts via `#[from]`
+- `query_as!` used for all queries; enum columns require type override: `status as "status: JoinRequestStatus"`
+- RETURNING clauses must list all columns explicitly (can't use `RETURNING *` with type overrides)
+- `fetch_optional` for nullable lookups, `fetch_one` for required, `fetch_all` for lists
+
+### Optimistic Locking Implementation
+- `JoinRequestRepo::update_status()` WHERE clause checks `id AND status AND updated_at`
+- Validates transition with `can_transition_to()` before hitting DB (fast-fail for invalid transitions)
+- Returns `AppError::AlreadyProcessed` when 0 rows affected (concurrent modification detected)
+- `updated_at` column set to `NOW()` on each status change — serves as the version field
+
+### Error Handling
+- `AppError` expanded with: `InvalidStateTransition`, `NotFound`, `Unauthorized`, `AlreadyProcessed`
+- `ConfigError` kept as manual enum (from Task 1), wrapped by `AppError::Config(#[from])`
+- `InvalidStateTransition` and `AlreadyProcessed` carry the enum values for actionable error messages
+
+### Testing Patterns
+- 27 tests total: 11 unit tests (status transitions), 16 `#[sqlx::test]` integration tests
+- Seed helper functions (`seed_community`, `seed_applicant`, `seed_community_question`) keep tests DRY
+- Optimistic locking tested by: create → update (changes updated_at) → retry with stale timestamp → assert AlreadyProcessed
+- Idempotency tested by: create applicant → upsert same telegram_user_id → assert same id, updated fields
+
+### Gotchas Discovered
+- `query_as!` macro expands to code referencing type override names directly — the imported type (e.g. `SessionState`) must be in scope even if not visibly used in the source file; requires `#[allow(unused_imports)]`
+- `#[sqlx(type_name = "text")]` on enums is needed for TEXT column compatibility — without it, sqlx tries to match a PostgreSQL custom type
+- `rename_all = "snake_case"` correctly handles multi-word variants: `QuestionnaireInProgress` → `questionnaire_in_progress`
+- `cargo sqlx prepare` must run AFTER migrations exist in the database — compile-time macros validate against live schema
+- `find_expired` cutoff logic: `created_at < cutoff` means cutoff must be MORE RECENT than records to find them (not older)
+- `SQLX_OFFLINE=true cargo build` works once `.sqlx/` cache is generated — all 24 new query metadata files cached

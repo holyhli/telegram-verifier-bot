@@ -1,0 +1,101 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, community_id, applicant_id, telegram_user_chat_id,\n                 status as \"status: JoinRequestStatus\",\n                 telegram_join_request_date, submitted_to_moderators_at, approved_at, rejected_at,\n                 moderator_message_chat_id, moderator_message_id,\n                 created_at, updated_at, reminder_sent_at\n             FROM join_requests\n             WHERE applicant_id = $1 AND community_id = $2\n               AND status NOT IN ('approved', 'rejected', 'banned', 'expired', 'cancelled')",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "community_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "applicant_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "telegram_user_chat_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "status: JoinRequestStatus",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "telegram_join_request_date",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "submitted_to_moderators_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "approved_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "rejected_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 9,
+        "name": "moderator_message_chat_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 10,
+        "name": "moderator_message_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 11,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 12,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 13,
+        "name": "reminder_sent_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "f1a7f5d58d30d015ab1f21b488befc80b27e51639671c38495a4a892487f4fc0"
+}

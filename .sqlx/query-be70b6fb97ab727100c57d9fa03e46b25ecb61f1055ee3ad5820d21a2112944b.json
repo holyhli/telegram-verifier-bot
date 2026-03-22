@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE applicant_sessions\n             SET state = 'completed', updated_at = NOW()\n             WHERE id = $1 AND state = 'awaiting_answer'\n             RETURNING id, join_request_id, current_question_position,\n                 state as \"state: SessionState\",\n                 created_at, updated_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "join_request_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "current_question_position",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "state: SessionState",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "be70b6fb97ab727100c57d9fa03e46b25ecb61f1055ee3ad5820d21a2112944b"
+}

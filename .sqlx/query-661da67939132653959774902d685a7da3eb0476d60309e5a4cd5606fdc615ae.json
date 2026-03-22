@@ -1,0 +1,48 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO join_request_answers (join_request_id, community_question_id, answer_text)\n             VALUES ($1, $2, $3)\n             RETURNING id, join_request_id, community_question_id, answer_text, created_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "join_request_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "community_question_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "answer_text",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "661da67939132653959774902d685a7da3eb0476d60309e5a4cd5606fdc615ae"
+}

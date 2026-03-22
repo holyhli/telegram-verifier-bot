@@ -1,0 +1,62 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO blacklist_entries (telegram_user_id, scope_type, community_id, reason, created_by_moderator_id)\n             VALUES ($1, $2, $3, $4, $5)\n             RETURNING id, telegram_user_id,\n                 scope_type as \"scope_type: ScopeType\",\n                 community_id, reason, created_by_moderator_id, created_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "telegram_user_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "scope_type: ScopeType",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "community_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "reason",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_by_moderator_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Int8",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "1a0f514da3144b92ab5dd07aa8f62db9a058973be669b4f8a0e02b3d54ebfe2f"
+}

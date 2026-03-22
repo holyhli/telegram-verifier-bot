@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, join_request_id, community_question_id, answer_text, created_at\n             FROM join_request_answers\n             WHERE join_request_id = $1\n             ORDER BY id ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "join_request_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "community_question_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "answer_text",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "fbc84c3c3eba97b2b9589a1b4d1fa844f9002a92716e73ab1f3809f00f21e28f"
+}

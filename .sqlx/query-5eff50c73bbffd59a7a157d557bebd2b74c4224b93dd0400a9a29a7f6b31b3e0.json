@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, join_request_id, moderator_telegram_user_id,\n                 action_type as \"action_type: ActionType\",\n                 created_at\n             FROM moderation_actions\n             WHERE join_request_id = $1\n             ORDER BY created_at ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "join_request_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "moderator_telegram_user_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "action_type: ActionType",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "5eff50c73bbffd59a7a157d557bebd2b74c4224b93dd0400a9a29a7f6b31b3e0"
+}

@@ -1,4 +1,19 @@
+pub mod answer_repo;
+pub mod applicant_repo;
+pub mod blacklist_repo;
+pub mod community_repo;
+pub mod join_request_repo;
+pub mod moderation_repo;
+pub mod session_repo;
 pub mod sync;
+
+pub use answer_repo::AnswerRepo;
+pub use applicant_repo::ApplicantRepo;
+pub use blacklist_repo::BlacklistRepo;
+pub use community_repo::CommunityRepo;
+pub use join_request_repo::JoinRequestRepo;
+pub use moderation_repo::ModerationActionRepo;
+pub use session_repo::SessionRepo;
 
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;

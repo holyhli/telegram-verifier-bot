@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, join_request_id, current_question_position,\n                 state as \"state: SessionState\",\n                 created_at, updated_at\n             FROM applicant_sessions\n             WHERE join_request_id = $1 AND state = 'awaiting_answer'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "join_request_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "current_question_position",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "state: SessionState",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "46bff66bd8416648e685148c8cf4122625ae339f645c49c54e4c981ca56b08b6"
+}

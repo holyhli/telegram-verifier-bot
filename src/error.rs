@@ -1,3 +1,4 @@
+use crate::domain::JoinRequestStatus;
 use std::fmt;
 
 #[derive(Debug)]
@@ -57,6 +58,24 @@ pub enum AppError {
 
     #[error("telegram error: {0}")]
     Telegram(String),
+
+    #[error("invalid state transition from {from} to {to}")]
+    InvalidStateTransition {
+        from: JoinRequestStatus,
+        to: JoinRequestStatus,
+    },
+
+    #[error("{0} not found")]
+    NotFound(String),
+
+    #[error("unauthorized: {0}")]
+    Unauthorized(String),
+
+    #[error("join request {join_request_id} already processed (status: {current_status})")]
+    AlreadyProcessed {
+        join_request_id: i64,
+        current_status: JoinRequestStatus,
+    },
 
     #[error("{0}")]
     Internal(String),
