@@ -169,3 +169,29 @@ This file tracks conventions, patterns, and architectural decisions discovered d
 - `teloxide::ApiError` is exported at crate root (`teloxide::ApiError`), not under `teloxide::types`
 - `update_listeners::polling_default` in 0.17 returns a ready listener future; for explicit `allowed_updates`, `Polling::builder(bot)` is the simpler path
 - `cargo test handler` can filter out all tests if names do not match as expected; using `cargo test --test handler_tests` is the reliable task-level check
+
+## [2026-03-22] Task 5: Questionnaire FSM + Answer Persistence
+
+### Service/Handler Split
+- Added `src/services/questionnaire.rs` for business logic and state transitions, and `src/bot/handlers/questionnaire.rs` as a thin Telegram adapter.
+- `process_private_message` in the handler only does routing: active session lookup, send validation errors, send next question, or send completion text.
+- FSM and persistence are centralized in `process_answer`: validate -> persist answer -> advance session OR complete session and transition join request to `submitted`.
+
+### Validation Rules Locked In
+- `validate_answer()` trims input and enforces: required non-empty, required min length >= 2 chars, and low-effort blocklist (`.", "..", "x", "xx", "test", "asdf", "123", "aaa", "-", "no", "n/a"`) case-insensitively.
+- Optional questions allow empty/whitespace-only answers (stored as empty string).
+- Error messages are exact constants to match product copy and test assertions.
+
+### Active Session Lookup Pattern
+- For private answers, active context is loaded via one SQL join across `applicants`, `join_requests`, `applicant_sessions`, and `community_questions` keyed by `telegram_user_id`.
+- Query constrains to `join_requests.status = 'questionnaire_in_progress'`, `applicant_sessions.state = 'awaiting_answer'`, and active question at current position.
+- If no active context exists, private messages are ignored (no DB writes, no outbound message).
+
+### Completion Behavior
+- On final answer: session state changes to `completed`, join request transitions `questionnaire_in_progress -> submitted`, applicant receives completion message, and handler logs `TODO: send moderator card` (Task 6 stub).
+- No moderation approve/decline logic is triggered in this phase; completion only submits for moderator review.
+
+### Testing Coverage
+- Added `tests/questionnaire_tests.rs` with 11 tests covering validation outcomes, persistence, non-advancement on invalid answers, completion path, no-session ignore, and full 5-question flow with final status assertion (`submitted`).
+- `cargo test questionnaire` runs tests whose names contain `questionnaire` across multiple test files (not just `questionnaire_tests.rs`).
+- `#[sqlx::test]` requires `DATABASE_URL` to be set; command used in this repo remains: `DATABASE_URL="postgres://verifier:verifier_dev@localhost:5432/verifier_bot_test" cargo test ...`.

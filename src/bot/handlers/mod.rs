@@ -1,4 +1,5 @@
 pub mod join_request;
+pub mod questionnaire;
 pub mod start;
 
 use async_trait::async_trait;
@@ -52,9 +53,7 @@ impl TelegramApi for TeloxideApi {
     }
 }
 
-pub async fn handle_private_message(_msg: Message) -> Result<(), AppError> {
-    Ok(())
-}
+pub use questionnaire::handle_private_message;
 
 pub async fn handle_callback_query(_query: CallbackQuery) -> Result<(), AppError> {
     Ok(())
