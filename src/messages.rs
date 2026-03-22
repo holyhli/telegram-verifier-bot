@@ -43,6 +43,24 @@ impl Messages {
     /// assert!(msg.contains("English"));
     /// assert!(msg.contains("Ukrainian"));
     /// ```
+    pub fn name_request_message(first_name: &str, community_title: &str) -> String {
+        format!(
+            "Hi {first_name}! 👋 You've requested to join {community_title}.\n\
+Before a moderator reviews your request, we have a few quick questions.\n\n\
+First, please tell us your name:\n\n\
+Привіт, {first_name}! 👋 Ти подав(ла) заявку на вступ до {community_title}.\n\
+Перед тим як модератор розгляне твою заявку, у нас є кілька коротких питань.\n\n\
+Спочатку, будь ласка, напиши своє ім'я:",
+            first_name = first_name,
+            community_title = community_title
+        )
+    }
+
+    pub fn language_selection_prompt() -> String {
+        "Please select your preferred language:\n\nБудь ласка, оберіть мову:".to_string()
+    }
+
+    /// Returns the language selection message (bilingual). Kept for compatibility.
     pub fn language_selection_message(first_name: &str, community_title: &str) -> String {
         format!(
             "Hi {}! I saw your request to join {}.\n\nPlease select your preferred language:\n\n🇬🇧 English\n🇺🇦 Українська",

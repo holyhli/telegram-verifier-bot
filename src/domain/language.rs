@@ -4,7 +4,7 @@ use std::fmt;
 
 /// Supported languages for community questions and applicant sessions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
-#[sqlx(type_name = "text", rename_all = "lowercase")]
+#[sqlx(type_name = "varchar", rename_all = "lowercase")]
 pub enum Language {
     #[sqlx(rename = "en")]
     English,

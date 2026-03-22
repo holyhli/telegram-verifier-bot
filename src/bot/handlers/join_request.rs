@@ -121,15 +121,10 @@ pub async fn process_join_request(
     )
     .await?;
 
-    let text = Messages::language_selection_message(&input.first_name, &input.community_title);
-
-    let keyboard = vec![vec![
-        ("🇬🇧 English".to_string(), "lang:en".to_string()),
-        ("🇺🇦 Українська".to_string(), "lang:uk".to_string()),
-    ]];
+    let text = Messages::name_request_message(&input.first_name, &input.community_title);
 
     match api
-        .send_message_with_inline_keyboard(input.user_chat_id, text, keyboard)
+        .send_message(input.user_chat_id, text)
         .await
     {
         Ok(()) => {
@@ -137,7 +132,7 @@ pub async fn process_join_request(
                 join_request_id = join_request.id,
                 community_id = community.id,
                 telegram_user_id = applicant.telegram_user_id,
-                "language selection message sent"
+                "name request message sent"
             );
 
             Ok(())
@@ -174,7 +169,7 @@ pub async fn process_join_request(
     }
 }
 
-fn is_user_unreachable_error(err: &RequestError) -> bool {
+pub fn is_user_unreachable_error(err: &RequestError) -> bool {
     match err {
         RequestError::Api(ApiError::BotBlocked)
         | RequestError::Api(ApiError::UserDeactivated)

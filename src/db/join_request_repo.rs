@@ -105,6 +105,28 @@ impl JoinRequestRepo {
         Ok(jr)
     }
 
+    pub async fn find_pending_contact_by_telegram_user_id(
+        pool: &PgPool,
+        telegram_user_id: i64,
+    ) -> Result<Option<JoinRequest>, AppError> {
+        let jr = sqlx::query_as::<_, JoinRequest>(
+            r#"SELECT jr.id, jr.community_id, jr.applicant_id, jr.telegram_user_chat_id,
+                 jr.status, jr.telegram_join_request_date, jr.submitted_to_moderators_at,
+                 jr.approved_at, jr.rejected_at, jr.moderator_message_chat_id,
+                 jr.moderator_message_id, jr.created_at, jr.updated_at, jr.reminder_sent_at
+             FROM join_requests jr
+             JOIN applicants a ON jr.applicant_id = a.id
+             WHERE a.telegram_user_id = $1 AND jr.status = 'pending_contact'
+             ORDER BY jr.created_at DESC
+             LIMIT 1"#,
+        )
+        .bind(telegram_user_id)
+        .fetch_optional(pool)
+        .await?;
+
+        Ok(jr)
+    }
+
     /// Updates join request status with optimistic locking.
     /// Checks `id`, `status`, and `updated_at` in WHERE clause to detect concurrent modifications.
     /// Returns `AlreadyProcessed` if another process modified the row first.

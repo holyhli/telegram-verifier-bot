@@ -1,6 +1,9 @@
 {
   "active_plan": "/Users/hlib/Documents/communities/projs/verifier-bot/.sisyphus/plans/verifier-bot.md",
   "started_at": "2026-03-22T16:26:18.812Z",
-  "session_ids": ["ses_2e9a198d9ffeLlmOdMm8UNzz4P"],
+  "session_ids": [
+    "ses_2e9a198d9ffeLlmOdMm8UNzz4P",
+    "ses_2e8630980ffepAeCiR8kRwAPZX"
+  ],
   "plan_name": "verifier-bot"
 }

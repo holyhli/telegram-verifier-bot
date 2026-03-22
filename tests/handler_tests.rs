@@ -207,21 +207,17 @@ async fn handle_join_request_sends_language_selection(pool: PgPool) -> sqlx::Res
         .await
         .expect("process join request");
 
-    // Verify keyboard was sent
-    let keyboards = api.keyboards_sent();
-    assert_eq!(keyboards.len(), 1);
-    let (chat_id, text, keyboard) = &keyboards[0];
+    // Verify plain text name-request message was sent (no keyboard on first contact)
+    let messages = api.sent_messages();
+    assert_eq!(messages.len(), 1);
+    let (chat_id, text) = &messages[0];
     assert_eq!(*chat_id, 123_456);
     assert!(text.contains("Alice"));
     assert!(text.contains("Community A"));
 
-    // Verify keyboard structure
-    assert_eq!(keyboard.len(), 1); // One row
-    assert_eq!(keyboard[0].len(), 2); // Two buttons
-    assert_eq!(keyboard[0][0].0, "🇬🇧 English");
-    assert_eq!(keyboard[0][0].1, "lang:en");
-    assert_eq!(keyboard[0][1].0, "🇺🇦 Українська");
-    assert_eq!(keyboard[0][1].1, "lang:uk");
+    // Verify NO keyboard was sent (user hasn't started the bot yet)
+    let keyboards = api.keyboards_sent();
+    assert_eq!(keyboards.len(), 0);
 
     // Verify join request created but status remains PendingContact
     let join_requests: Vec<(String,)> = sqlx::query_as("SELECT status::text FROM join_requests")
@@ -400,7 +396,17 @@ async fn language_selection_en_creates_session_and_sends_question(
     pool: PgPool,
 ) -> sqlx::Result<()> {
     let community_id = seed_community(&pool, -1009000000010, "lang-test-1").await;
-    seed_question(&pool, community_id, "What do you build?").await;
+    // Question 1 = name (pre-answered via name prompt reply)
+    seed_question(&pool, community_id, "What is your name?").await;
+    // Question 2 = first question actually sent after language selection
+    sqlx::query(
+        "INSERT INTO community_questions (community_id, question_key, question_text, question_text_uk, required, position)
+         VALUES ($1, 'q2', 'What do you build?', 'What do you build? (Ukrainian)', TRUE, 2)",
+    )
+    .bind(community_id)
+    .execute(&pool)
+    .await
+    .expect("seed question 2");
 
     let applicant_id: i64 = sqlx::query_scalar(
         "INSERT INTO applicants (telegram_user_id, first_name) VALUES (123456, 'Alice') RETURNING id",
@@ -429,19 +435,28 @@ async fn language_selection_en_creates_session_and_sends_question(
     .await
     .expect("language selection should succeed");
 
+    // Should send welcome + question 2 (question 1 pre-answered via name prompt)
     let sent = api.sent_messages();
     assert_eq!(sent.len(), 1);
     assert_eq!(sent[0].0, 123456);
     assert!(sent[0].1.contains("Hi Alice!"));
     assert!(sent[0].1.contains("What do you build?"));
-    assert!(!sent[0].1.contains("Ukrainian"));
 
+    // Session starts at position 2
     let session = SessionRepo::find_active_by_join_request_id(&pool, join_request_id)
         .await
         .expect("find session")
         .expect("session should exist");
-    assert_eq!(session.current_question_position, 1);
+    assert_eq!(session.current_question_position, 2);
     assert_eq!(session.language, Language::English);
+
+    // Name answer stored for question 1
+    let answers: Vec<(String,)> = sqlx::query_as("SELECT answer_text FROM join_request_answers WHERE join_request_id = $1")
+        .bind(join_request_id)
+        .fetch_all(&pool)
+        .await?;
+    assert_eq!(answers.len(), 1);
+    assert_eq!(answers[0].0, "Alice");
 
     let jr = JoinRequestRepo::find_by_id(&pool, join_request_id)
         .await
@@ -457,7 +472,15 @@ async fn language_selection_uk_creates_session_and_sends_question(
     pool: PgPool,
 ) -> sqlx::Result<()> {
     let community_id = seed_community(&pool, -1009000000011, "lang-test-2").await;
-    seed_question(&pool, community_id, "What do you build?").await;
+    seed_question(&pool, community_id, "What is your name?").await;
+    sqlx::query(
+        "INSERT INTO community_questions (community_id, question_key, question_text, question_text_uk, required, position)
+         VALUES ($1, 'q2', 'What do you build?', 'Що ви будуєте?', TRUE, 2)",
+    )
+    .bind(community_id)
+    .execute(&pool)
+    .await
+    .expect("seed question 2");
 
     let applicant_id: i64 = sqlx::query_scalar(
         "INSERT INTO applicants (telegram_user_id, first_name) VALUES (234567, 'Олена') RETURNING id",
@@ -490,13 +513,13 @@ async fn language_selection_uk_creates_session_and_sends_question(
     assert_eq!(sent.len(), 1);
     assert_eq!(sent[0].0, 234567);
     assert!(sent[0].1.contains("Привіт, Олена!"));
-    assert!(sent[0].1.contains("What do you build? (Ukrainian)"));
+    assert!(sent[0].1.contains("Що ви будуєте?"));
 
     let session = SessionRepo::find_active_by_join_request_id(&pool, join_request_id)
         .await
         .expect("find session")
         .expect("session should exist");
-    assert_eq!(session.current_question_position, 1);
+    assert_eq!(session.current_question_position, 2);
     assert_eq!(session.language, Language::Ukrainian);
 
     let jr = JoinRequestRepo::find_by_id(&pool, join_request_id)

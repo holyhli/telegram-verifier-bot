@@ -1,10 +1,15 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT first_name FROM applicants WHERE id = $1",
+  "query": "SELECT id, first_name FROM applicants WHERE id = $1",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
         "name": "first_name",
         "type_info": "Text"
       }
@@ -15,8 +20,9 @@
       ]
     },
     "nullable": [
+      false,
       false
     ]
   },
-  "hash": "f392f393c50a84f3e023f7f8e8309cce8b9fe673e46d6407a1a157804a0c2556"
+  "hash": "1d69c08de1a9adbc85fcc833579293353d321dc78748139817c4ebdb7e846816"
 }
