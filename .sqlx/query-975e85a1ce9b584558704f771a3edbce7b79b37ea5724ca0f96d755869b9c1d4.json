@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO communities (telegram_chat_id, title, slug, is_active)\n        VALUES ($1, $2, $3, TRUE)\n        ON CONFLICT (telegram_chat_id) DO UPDATE\n            SET title = EXCLUDED.title,\n                slug = EXCLUDED.slug,\n                is_active = TRUE,\n                updated_at = NOW()\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "975e85a1ce9b584558704f771a3edbce7b79b37ea5724ca0f96d755869b9c1d4"
+}
