@@ -1,0 +1,55 @@
+[bot]
+application_timeout_minutes = 60
+reminder_before_expiry_minutes = 15
+
+[[communities]]
+telegram_chat_id = -1001234567890
+title = "DeFi Amsterdam"
+slug = "defi-amsterdam"
+
+[[communities.questions]]
+key = "name"
+text = "What is your name?"
+required = true
+position = 1
+
+[[communities.questions]]
+key = "occupation"
+text = "What do you do / where do you work?"
+required = true
+position = 2
+
+[[communities.questions]]
+key = "referral"
+text = "How did you hear about us?"
+required = false
+position = 3
+
+[[communities]]
+telegram_chat_id = -1009876543210
+title = "Rust Developers NL"
+slug = "rust-nl"
+
+[[communities.questions]]
+key = "name"
+text = "What is your full name?"
+required = true
+position = 1
+
+[[communities.questions]]
+key = "experience"
+text = "What is your experience with Rust?"
+required = true
+position = 2
+
+[[communities.questions]]
+key = "github"
+text = "Link to your GitHub profile (optional)"
+required = false
+position = 3
+
+[[communities.questions]]
+key = "motivation"
+text = "Why do you want to join this community?"
+required = true
+position = 4

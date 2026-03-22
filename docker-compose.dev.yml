@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: verifier-bot-db
+    environment:
+      POSTGRES_USER: verifier
+      POSTGRES_PASSWORD: verifier_dev
+      POSTGRES_DB: verifier_bot
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U verifier -d verifier_bot"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:

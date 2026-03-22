@@ -1,0 +1,30 @@
+[package]
+name = "verifier-bot"
+version = "0.1.0"
+edition = "2021"
+description = "Telegram moderation bot for community join request verification"
+
+[dependencies]
+teloxide = { version = "0.17.0", features = ["macros"] }
+tokio = { version = "1.50.0", features = ["full"] }
+sqlx = { version = "0.8.6", features = [
+    "runtime-tokio",
+    "tls-rustls",
+    "postgres",
+    "chrono",
+    "uuid",
+    "migrate",
+] }
+axum = "0.8.8"
+serde = { version = "1.0.228", features = ["derive"] }
+toml = "1.0.7"
+dotenvy = "0.15.7"
+chrono = { version = "0.4.44", features = ["serde"] }
+uuid = { version = "1.22.0", features = ["v4", "serde"] }
+thiserror = "2.0.18"
+anyhow = "1.0.102"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
+
+[dev-dependencies]
+tempfile = "3"

@@ -1,0 +1,8 @@
+/target
+.env
+!.env.example
+!.env.test
+*.swp
+*.swo
+*~
+.DS_Store
