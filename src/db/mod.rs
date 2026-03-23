@@ -3,6 +3,7 @@ pub mod applicant_repo;
 pub mod blacklist_repo;
 pub mod community_repo;
 pub mod join_request_repo;
+pub mod question_event_repo;
 pub mod moderation_repo;
 pub mod session_repo;
 pub mod sync;
@@ -14,6 +15,7 @@ pub use community_repo::CommunityRepo;
 pub use join_request_repo::JoinRequestRepo;
 pub use moderation_repo::ModerationActionRepo;
 pub use session_repo::SessionRepo;
+pub use question_event_repo::QuestionEventRepo;
 
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;

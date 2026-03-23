@@ -1,0 +1,14 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.15s
+     Running tests/stats_tests.rs (target/debug/deps/stats_tests-db53eb3e4e763926)
+
+running 7 tests
+test tests::test_callback_data_fits_64_bytes ... ok
+test tests::test_callback_data_invalid_returns_none ... ok
+test tests::test_callback_data_roundtrip ... ok
+test tests::test_question_event_type_variants ... ok
+test test_find_by_join_request_id ... ok
+test test_question_event_repo_create ... ok
+test test_count_validation_failures ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.46s
+
