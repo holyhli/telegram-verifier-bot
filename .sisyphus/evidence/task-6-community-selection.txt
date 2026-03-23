@@ -1,0 +1,19 @@
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.16s
+--- stats_tests compilation ---
+   Compiling verifier-bot v0.1.0 (/root/bots/telegram-verifier-bot)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.21s
+     Running tests/stats_tests.rs (target/debug/deps/stats_tests-db53eb3e4e763926)
+
+running 9 tests
+test formatter_tests::test_format_active_view_middle_page ... ok
+test formatter_tests::test_format_community_selection ... ok
+test formatter_tests::test_format_community_selection_html_escape ... ok
+test formatter_tests::test_format_active_view_pagination ... ok
+test formatter_tests::test_format_empty_active_view ... ok
+test formatter_tests::test_format_empty_summary_view ... ok
+test formatter_tests::test_format_message_within_limit ... ok
+test formatter_tests::test_format_period_selection ... ok
+test formatter_tests::test_format_summary_view_with_warning ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
