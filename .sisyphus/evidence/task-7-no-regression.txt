@@ -1,0 +1,20 @@
+test join_request_find_expired ... ok
+test join_request_find_needing_reminder ... ok
+test join_request_update_status_invalid_transition ... ok
+test session_expire ... ok
+test status_is_terminal ... ok
+test status_transition_any_active_to_cancelled ... ok
+test status_transition_any_active_to_expired ... ok
+test status_transition_invalid_backwards ... ok
+test moderation_create_and_find ... ok
+test join_request_update_status_valid_transition ... ok
+test status_transition_questionnaire_to_submitted ... ok
+test status_transition_submitted_to_banned ... ok
+test status_transition_submitted_to_approved ... ok
+test status_transition_submitted_to_rejected ... ok
+test status_transition_terminal_cannot_transition ... ok
+test status_transition_pending_to_questionnaire ... ok
+test session_lifecycle ... ok
+
+test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.21s
+

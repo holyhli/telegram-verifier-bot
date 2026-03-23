@@ -1,7 +1,7 @@
 use sqlx::PgPool;
 
-use crate::db::{AnswerRepo, CommunityRepo, JoinRequestRepo, SessionRepo};
-use crate::domain::{JoinRequestStatus, Language};
+use crate::db::{AnswerRepo, CommunityRepo, JoinRequestRepo, QuestionEventRepo, SessionRepo};
+use crate::domain::{JoinRequestStatus, Language, QuestionEventType};
 use crate::error::AppError;
 use crate::messages::Messages;
 
@@ -110,6 +110,12 @@ pub async fn process_language_selection_callback(
                 language = ?language,
                 "language selected, questionnaire started at question 2"
             );
+
+            if let Some(q) = second_question {
+                if let Err(e) = QuestionEventRepo::create(pool, join_request.id, q.id, join_request.applicant_id, QuestionEventType::QuestionPresented, None).await {
+                    tracing::error!(join_request_id = join_request.id, error = %e, "failed to record question_presented event");
+                }
+            }
 
             // Answer callback query with confirmation
             let confirmation = match language {

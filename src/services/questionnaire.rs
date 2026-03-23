@@ -2,9 +2,9 @@ use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use std::fmt;
 
-use crate::db::{AnswerRepo, CommunityRepo, JoinRequestRepo, SessionRepo};
+use crate::db::{AnswerRepo, CommunityRepo, JoinRequestRepo, QuestionEventRepo, SessionRepo};
 use crate::domain::{
-    ApplicantSession, CommunityQuestion, JoinRequest, JoinRequestStatus, SessionState, Language,
+    ApplicantSession, CommunityQuestion, JoinRequest, JoinRequestStatus, QuestionEventType, SessionState, Language,
 };
 use crate::error::AppError;
 use crate::messages::Messages;
@@ -237,6 +237,10 @@ pub async fn process_answer(
         &validated_answer,
     )
     .await?;
+
+    if let Err(e) = QuestionEventRepo::create(pool, context.join_request.id, context.current_question.id, context.join_request.applicant_id, QuestionEventType::AnswerAccepted, None).await {
+        tracing::error!(join_request_id = context.join_request.id, error = %e, "failed to record answer_accepted event");
+    }
 
     let questions = CommunityRepo::find_active_questions(pool, context.join_request.community_id).await?;
     let next_question = questions

@@ -8,7 +8,8 @@ use crate::config::Config;
 use crate::error::AppError;
 use crate::messages::Messages;
 use crate::services::moderator::send_moderator_card;
-use crate::db::{ApplicantRepo, JoinRequestRepo};
+use crate::db::{ApplicantRepo, JoinRequestRepo, QuestionEventRepo};
+use crate::domain::QuestionEventType;
 use crate::services::questionnaire::{
     find_active_context_by_telegram_user_id, process_answer, ProcessAnswerResult, QuestionnaireStep,
 };
@@ -102,6 +103,9 @@ pub async fn process_private_message(
     };
 
     let language = context.session.language;
+    let jr_id = context.join_request.id;
+    let applicant_id = context.join_request.applicant_id;
+    let current_question_id = context.current_question.id;
     let result = process_answer(pool, context, &input.text).await?;
 
     match result {
@@ -109,6 +113,9 @@ pub async fn process_private_message(
             api.send_message(input.chat_id, message)
                 .await
                 .map_err(|err| AppError::Telegram(err.to_string()))?;
+            if let Err(e) = QuestionEventRepo::create(pool, jr_id, current_question_id, applicant_id, QuestionEventType::ValidationFailed, None).await {
+                tracing::error!(join_request_id = jr_id, error = %e, "failed to record validation_failed event");
+            }
         }
         ProcessAnswerResult::Advanced {
             step: QuestionnaireStep::NextQuestion { question },
@@ -117,6 +124,9 @@ pub async fn process_private_message(
             api.send_message(input.chat_id, question_text.to_string())
                 .await
                 .map_err(|err| AppError::Telegram(err.to_string()))?;
+            if let Err(e) = QuestionEventRepo::create(pool, jr_id, question.id, applicant_id, QuestionEventType::QuestionPresented, None).await {
+                tracing::error!(join_request_id = jr_id, error = %e, "failed to record question_presented event");
+            }
         }
         ProcessAnswerResult::Advanced {
             step: QuestionnaireStep::Completed { join_request },
