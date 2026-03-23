@@ -289,6 +289,8 @@ mod formatter_tests {
         // Create 25 applicants
         let applicants: Vec<ActiveApplicantInfo> = (1..=25)
             .map(|i| ActiveApplicantInfo {
+                join_request_id: i as i64,
+                applicant_id: i as i64,
                 name: Some(format!("User{}", i)),
                 username: Some(format!("user{}", i)),
                 current_question_position: 3,
@@ -341,6 +343,8 @@ mod formatter_tests {
     fn test_format_active_view_middle_page() {
         let applicants: Vec<ActiveApplicantInfo> = (1..=25)
             .map(|i| ActiveApplicantInfo {
+                join_request_id: i as i64,
+                applicant_id: i as i64,
                 name: Some(format!("User{}", i)),
                 username: None,
                 current_question_position: 1,
@@ -367,23 +371,28 @@ mod formatter_tests {
     #[test]
     fn test_format_summary_view_with_warning() {
         let summaries = vec![ApplicantSummary {
+            join_request_id: 1,
+            applicant_id: 1,
             name: Some("John".to_string()),
             username: Some("johndoe".to_string()),
             status: "approved".to_string(),
             question_timings: vec![
                 QuestionTiming {
+                    community_question_id: 1,
                     position: 1,
                     question_text: "Name".to_string(),
                     duration_secs: Some(72),
                     retry_count: 0,
                 },
                 QuestionTiming {
+                    community_question_id: 2,
                     position: 2,
                     question_text: "Occupation".to_string(),
                     duration_secs: Some(930),  // 15m 30s — >10m triggers ⚠️
                     retry_count: 2,
                 },
                 QuestionTiming {
+                    community_question_id: 3,
                     position: 3,
                     question_text: "Referral".to_string(),
                     duration_secs: Some(45),
@@ -426,6 +435,8 @@ mod formatter_tests {
         // Create many applicants with long names to stress the 4096 char limit
         let applicants: Vec<ActiveApplicantInfo> = (1..=100)
             .map(|i| ActiveApplicantInfo {
+                join_request_id: i as i64,
+                applicant_id: i as i64,
                 name: Some(format!("VeryLongUserName_{}_WithExtraText", i)),
                 username: Some(format!("username_{}_with_a_long_handle", i)),
                 current_question_position: 5,
@@ -469,4 +480,218 @@ mod formatter_tests {
         );
         assert!(text.contains("No applicants"));
     }
+}
+
+// --- StatsService Tests ---
+
+use chrono::{TimeZone, Utc};
+use verifier_bot::domain::QuestionEvent;
+use verifier_bot::services::StatsService;
+
+async fn activate_join_request(pool: &PgPool, jr_id: i64) {
+    sqlx::query("UPDATE join_requests SET status = 'questionnaire_in_progress' WHERE id = $1")
+        .bind(jr_id)
+        .execute(pool)
+        .await
+        .expect("activate join request");
+}
+
+async fn submit_join_request(pool: &PgPool, jr_id: i64) {
+    sqlx::query("UPDATE join_requests SET status = 'submitted' WHERE id = $1")
+        .bind(jr_id)
+        .execute(pool)
+        .await
+        .expect("submit join request");
+}
+
+async fn seed_session(pool: &PgPool, jr_id: i64, position: i32, state: &str) -> i64 {
+    let (id,): (i64,) = sqlx::query_as(
+        "INSERT INTO applicant_sessions (join_request_id, current_question_position, state) VALUES ($1, $2, $3) RETURNING id",
+    )
+    .bind(jr_id)
+    .bind(position)
+    .bind(state)
+    .fetch_one(pool)
+    .await
+    .expect("seed session");
+    id
+}
+
+async fn seed_question_event(pool: &PgPool, jr_id: i64, question_id: i64, applicant_id: i64, event_type: &str) {
+    sqlx::query(
+        "INSERT INTO question_events (join_request_id, community_question_id, applicant_id, event_type) VALUES ($1, $2, $3, $4)",
+    )
+    .bind(jr_id)
+    .bind(question_id)
+    .bind(applicant_id)
+    .bind(event_type)
+    .execute(pool)
+    .await
+    .expect("seed question event");
+}
+
+async fn seed_join_request_at(
+    pool: &PgPool,
+    community_id: i64,
+    applicant_id: i64,
+    created_at: chrono::DateTime<Utc>,
+    status: &str,
+) -> i64 {
+    let (id,): (i64,) = sqlx::query_as(
+        "INSERT INTO join_requests (community_id, applicant_id, telegram_user_chat_id, telegram_join_request_date, status, created_at) VALUES ($1, $2, 100000, NOW(), $3, $4) RETURNING id",
+    )
+    .bind(community_id)
+    .bind(applicant_id)
+    .bind(status)
+    .bind(created_at)
+    .fetch_one(pool)
+    .await
+    .expect("seed join_request_at");
+    id
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn test_get_active_applicants(pool: PgPool) -> sqlx::Result<()> {
+    let community_id = seed_community(&pool).await;
+    let q1 = seed_question(&pool, community_id, 1).await;
+    let _q2 = seed_question(&pool, community_id, 2).await;
+    let _q3 = seed_question(&pool, community_id, 3).await;
+
+    let app1 = seed_applicant(&pool, 800001).await;
+    let jr1 = seed_join_request(&pool, community_id, app1).await;
+    activate_join_request(&pool, jr1).await;
+    seed_session(&pool, jr1, 1, "awaiting_answer").await;
+    seed_question_event(&pool, jr1, q1, app1, "question_presented").await;
+
+    let app2 = seed_applicant(&pool, 800002).await;
+    let jr2 = seed_join_request(&pool, community_id, app2).await;
+    activate_join_request(&pool, jr2).await;
+    seed_session(&pool, jr2, 1, "awaiting_answer").await;
+    seed_question_event(&pool, jr2, q1, app2, "question_presented").await;
+
+    let app3 = seed_applicant(&pool, 800003).await;
+    let jr3 = seed_join_request(&pool, community_id, app3).await;
+    submit_join_request(&pool, jr3).await;
+    seed_session(&pool, jr3, 3, "completed").await;
+
+    let result = StatsService::get_active_applicants(&pool, community_id)
+        .await
+        .expect("get_active_applicants");
+
+    assert_eq!(result.len(), 2);
+    let ids: Vec<i64> = result.iter().map(|r| r.join_request_id).collect();
+    assert!(ids.contains(&jr1));
+    assert!(ids.contains(&jr2));
+    assert!(!ids.contains(&jr3));
+
+    assert_eq!(result[0].total_questions, 3);
+    assert_eq!(result[0].current_question_position, 1);
+    assert!(result[0].time_started_secs >= 0);
+
+    Ok(())
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn test_get_period_summary_filters_by_time(pool: PgPool) -> sqlx::Result<()> {
+    let community_id = seed_community(&pool).await;
+    let _q1 = seed_question(&pool, community_id, 1).await;
+
+    let app1 = seed_applicant(&pool, 810001).await;
+    let app2 = seed_applicant(&pool, 810002).await;
+    let app3 = seed_applicant(&pool, 810003).await;
+
+    let two_days_ago = Utc::now() - chrono::Duration::days(2);
+    let one_day_ago = Utc::now() - chrono::Duration::days(1);
+    let now = Utc::now();
+
+    seed_join_request_at(&pool, community_id, app1, two_days_ago, "submitted").await;
+    seed_join_request_at(&pool, community_id, app2, one_day_ago, "questionnaire_in_progress").await;
+    seed_join_request_at(&pool, community_id, app3, now, "questionnaire_in_progress").await;
+
+    let period_start = Utc::now() - chrono::Duration::hours(25);
+    let result = StatsService::get_period_summary(&pool, community_id, period_start)
+        .await
+        .expect("get_period_summary");
+
+    assert_eq!(result.len(), 2);
+    let applicant_ids: Vec<i64> = result.iter().map(|r| r.applicant_id).collect();
+    assert!(applicant_ids.contains(&app2));
+    assert!(applicant_ids.contains(&app3));
+    assert!(!applicant_ids.contains(&app1));
+
+    Ok(())
+}
+
+#[test]
+fn test_compute_per_question_timing() {
+    let base = Utc.with_ymd_and_hms(2025, 1, 1, 10, 0, 0).unwrap();
+
+    let events = vec![
+        QuestionEvent {
+            id: 1,
+            join_request_id: 1,
+            community_question_id: 100,
+            applicant_id: 1,
+            event_type: QuestionEventType::QuestionPresented,
+            metadata: None,
+            created_at: base,
+        },
+        QuestionEvent {
+            id: 2,
+            join_request_id: 1,
+            community_question_id: 100,
+            applicant_id: 1,
+            event_type: QuestionEventType::ValidationFailed,
+            metadata: None,
+            created_at: base + chrono::Duration::seconds(30),
+        },
+        QuestionEvent {
+            id: 3,
+            join_request_id: 1,
+            community_question_id: 100,
+            applicant_id: 1,
+            event_type: QuestionEventType::ValidationFailed,
+            metadata: None,
+            created_at: base + chrono::Duration::seconds(60),
+        },
+        QuestionEvent {
+            id: 4,
+            join_request_id: 1,
+            community_question_id: 100,
+            applicant_id: 1,
+            event_type: QuestionEventType::AnswerAccepted,
+            metadata: None,
+            created_at: base + chrono::Duration::seconds(90),
+        },
+        QuestionEvent {
+            id: 5,
+            join_request_id: 1,
+            community_question_id: 200,
+            applicant_id: 1,
+            event_type: QuestionEventType::QuestionPresented,
+            metadata: None,
+            created_at: base + chrono::Duration::seconds(100),
+        },
+        QuestionEvent {
+            id: 6,
+            join_request_id: 1,
+            community_question_id: 200,
+            applicant_id: 1,
+            event_type: QuestionEventType::AnswerAccepted,
+            metadata: None,
+            created_at: base + chrono::Duration::seconds(145),
+        },
+    ];
+
+    let timings = StatsService::compute_per_question_timing(&events);
+
+    assert_eq!(timings.len(), 2);
+
+    assert_eq!(timings[0].community_question_id, 100);
+    assert_eq!(timings[0].duration_secs, Some(90));
+    assert_eq!(timings[0].retry_count, 2);
+
+    assert_eq!(timings[1].community_question_id, 200);
+    assert_eq!(timings[1].duration_secs, Some(45));
+    assert_eq!(timings[1].retry_count, 0);
 }

@@ -1,0 +1,20 @@
+test formatter_tests::test_format_active_view_pagination ... ok
+test formatter_tests::test_format_community_selection_html_escape ... ok
+test formatter_tests::test_format_empty_active_view ... ok
+test formatter_tests::test_format_empty_summary_view ... ok
+test formatter_tests::test_format_period_selection ... ok
+test formatter_tests::test_format_message_within_limit ... ok
+test test_compute_per_question_timing ... ok
+test formatter_tests::test_format_summary_view_with_warning ... ok
+test test_count_validation_failures ... ok
+test test_get_period_summary_filters_by_time ... ok
+test tests::test_callback_data_fits_64_bytes ... ok
+test tests::test_callback_data_invalid_returns_none ... ok
+test test_find_by_join_request_id ... ok
+test tests::test_callback_data_roundtrip ... ok
+test tests::test_question_event_type_variants ... ok
+test test_get_active_applicants ... ok
+test test_question_event_repo_create ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.95s
+

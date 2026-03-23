@@ -1,37 +1,5 @@
 use crate::bot::handlers::stats::{StatsCallbackData, StatsPeriod, StatsView};
-
-/// Information about an applicant currently in progress.
-/// Defined here for formatter use; T5 (stats.rs service) will produce these.
-#[derive(Debug, Clone)]
-pub struct ActiveApplicantInfo {
-    pub name: Option<String>,
-    pub username: Option<String>,
-    pub current_question_position: i32,
-    pub total_questions: i32,
-    pub current_question_text: String,
-    pub time_on_current_secs: i64,
-    pub time_started_secs: i64,
-}
-
-/// Timing information for a single question in summary view.
-#[derive(Debug, Clone)]
-pub struct QuestionTiming {
-    pub position: i32,
-    pub question_text: String,
-    pub duration_secs: Option<i64>,
-    pub retry_count: i64,
-}
-
-/// Summary of an applicant's questionnaire completion.
-#[derive(Debug, Clone)]
-pub struct ApplicantSummary {
-    pub name: Option<String>,
-    pub username: Option<String>,
-    pub status: String,
-    pub question_timings: Vec<QuestionTiming>,
-    pub total_time_secs: Option<i64>,
-    pub total_retries: i64,
-}
+pub use crate::services::stats::{ActiveApplicantInfo, ApplicantSummary, QuestionTiming};
 
 const PAGE_SIZE: usize = 10;
 const MESSAGE_CHAR_LIMIT: usize = 4096;
