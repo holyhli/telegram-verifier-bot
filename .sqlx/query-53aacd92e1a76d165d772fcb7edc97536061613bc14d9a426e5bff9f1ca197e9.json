@@ -1,0 +1,62 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO question_events (join_request_id, community_question_id, applicant_id, event_type, metadata)\n             VALUES ($1, $2, $3, $4, $5)\n             RETURNING id, join_request_id, community_question_id, applicant_id,\n                       event_type as \"event_type: QuestionEventType\", metadata, created_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "join_request_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "community_question_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "applicant_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "event_type: QuestionEventType",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "metadata",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Int8",
+        "Text",
+        "Jsonb"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "53aacd92e1a76d165d772fcb7edc97536061613bc14d9a426e5bff9f1ca197e9"
+}
