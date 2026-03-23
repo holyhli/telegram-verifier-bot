@@ -1,0 +1,53 @@
+     Running tests/moderation_tests.rs (target/debug/deps/moderation_tests-1a2458e0f69f191a)
+
+running 12 tests
+test moderation_ban_flow_updates_status_audit_blacklist ... ok
+test moderation_approve_flow_updates_status_audit_and_card ... ok
+test moderation_applicant_blocked_does_not_fail ... ok
+test moderation_parse_callback_data_invalid ... ok
+test moderation_parse_callback_data_valid ... ok
+test moderation_authorization_denied ... ok
+test moderation_render_card_includes_all_fields ... ok
+test moderation_render_card_username_not_set ... ok
+test moderation_reject_flow_updates_status_audit_and_card ... ok
+test moderation_hide_requester_missing_is_handled ... ok
+test moderation_send_card_delivers_html_and_keyboard ... ok
+test moderation_double_processing_returns_friendly_error ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.02s
+
+     Running tests/questionnaire_tests.rs (target/debug/deps/questionnaire_tests-74b2f5f227b33924)
+
+running 16 tests
+test questionnaire_out_of_order_no_session_is_ignored ... ok
+test questionnaire_process_answer_completes_on_last_question ... ok
+test questionnaire_process_answer_stores_and_advances ... ok
+test questionnaire_validate_answer_low_effort_rejected_case_insensitive ... ok
+test questionnaire_validate_answer_optional_accepts_empty ... ok
+test questionnaire_validate_answer_required_empty_rejected ... ok
+test questionnaire_validate_answer_required_too_short_rejected ... ok
+test questionnaire_validate_answer_required_valid ... ok
+test questionnaire_validate_answer_required_whitespace_rejected ... ok
+test questionnaire_validate_answer_ukrainian_low_effort_rejected ... ok
+test questionnaire_validate_answer_ukrainian_required_empty_rejected ... ok
+test questionnaire_validate_answer_ukrainian_too_short_rejected ... ok
+test questionnaire_full_five_question_flow_submits ... ok
+test questionnaire_validation_failure_does_not_advance_or_store ... ok
+test questionnaire_ukrainian_validation_error_messages ... ok
+test questionnaire_ukrainian_completion_message ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.01s
+
+     Running tests/stats_tests.rs (target/debug/deps/stats_tests-db53eb3e4e763926)
+
+running 4 tests
+test tests::test_callback_data_invalid_returns_none ... ok
+test tests::test_callback_data_roundtrip ... ok
+test tests::test_question_event_type_variants ... ok
+test tests::test_callback_data_fits_64_bytes ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+---
+NOTE: language_selection_tests.rs has 52 pre-existing errors from another task (not related to edit_message_html_with_markup)
+All 5 test files with FakeTelegramApi compile and pass with the new trait method.
