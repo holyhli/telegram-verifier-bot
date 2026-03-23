@@ -1,10 +1,8 @@
 {
-  "active_plan": "/Users/hlib/Documents/communities/projs/verifier-bot/.sisyphus/plans/verifier-bot.md",
-  "started_at": "2026-03-22T16:26:18.812Z",
+  "active_plan": "/root/bots/telegram-verifier-bot/.sisyphus/plans/stats-command.md",
+  "started_at": "2026-03-23T11:46:13.526Z",
   "session_ids": [
-    "ses_2e9a198d9ffeLlmOdMm8UNzz4P",
-    "ses_2e8630980ffepAeCiR8kRwAPZX",
-    "ses_2e817c39fffe0k22sY9KZ7xhPj"
+    "ses_2e57baa7bffeQZRTejZPogFK4X"
   ],
-  "plan_name": "verifier-bot"
+  "plan_name": "stats-command"
 }

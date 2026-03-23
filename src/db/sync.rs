@@ -40,21 +40,34 @@ async fn sync_questions(
     community_id: i64,
     community: &CommunityConfig,
 ) -> Result<(), sqlx::Error> {
-    let active_keys: Vec<String> = community.questions.iter().map(|q| q.key.clone()).collect();
+    // Step 1: Deactivate ALL active questions for this community.
+    // This clears the partial unique indexes on (community_id, position)
+    // and (community_id, question_key) WHERE is_active = TRUE,
+    // preventing conflicts when questions are added, removed, or reordered.
+    sqlx::query!(
+        r#"
+        UPDATE community_questions
+        SET is_active = FALSE, updated_at = NOW()
+        WHERE community_id = $1 AND is_active = TRUE
+        "#,
+        community_id,
+    )
+    .execute(pool)
+    .await?;
 
+    // Step 2: For each question in config, reactivate existing row or insert new.
+    // Since all rows are inactive, partial unique indexes are empty — no conflicts.
     for question in &community.questions {
-        sqlx::query!(
+        let result = sqlx::query!(
             r#"
-            INSERT INTO community_questions (community_id, question_key, question_text, question_text_uk, required, position, is_active)
-            VALUES ($1, $2, $3, $4, $5, $6, TRUE)
-            ON CONFLICT (community_id, question_key) WHERE is_active = TRUE
-            DO UPDATE
-                SET question_text = EXCLUDED.question_text,
-                    question_text_uk = EXCLUDED.question_text_uk,
-                    required = EXCLUDED.required,
-                    position = EXCLUDED.position,
-                    is_active = TRUE,
-                    updated_at = NOW()
+            UPDATE community_questions
+            SET question_text = $3,
+                question_text_uk = $4,
+                required = $5,
+                position = $6,
+                is_active = TRUE,
+                updated_at = NOW()
+            WHERE community_id = $1 AND question_key = $2
             "#,
             community_id,
             question.key,
@@ -65,31 +78,24 @@ async fn sync_questions(
         )
         .execute(pool)
         .await?;
+
+        if result.rows_affected() == 0 {
+            sqlx::query!(
+                r#"
+                INSERT INTO community_questions (community_id, question_key, question_text, question_text_uk, required, position, is_active)
+                VALUES ($1, $2, $3, $4, $5, $6, TRUE)
+                "#,
+                community_id,
+                question.key,
+                question.text_en,
+                question.text_uk,
+                question.required,
+                question.position as i32,
+            )
+            .execute(pool)
+            .await?;
+        }
     }
-
-    deactivate_removed_questions(pool, community_id, &active_keys).await?;
-
-    Ok(())
-}
-
-async fn deactivate_removed_questions(
-    pool: &PgPool,
-    community_id: i64,
-    active_keys: &[String],
-) -> Result<(), sqlx::Error> {
-    sqlx::query!(
-        r#"
-        UPDATE community_questions
-        SET is_active = FALSE, updated_at = NOW()
-        WHERE community_id = $1
-          AND is_active = TRUE
-          AND question_key != ALL($2)
-        "#,
-        community_id,
-        active_keys,
-    )
-    .execute(pool)
-    .await?;
 
     Ok(())
 }

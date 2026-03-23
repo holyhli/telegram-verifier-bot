@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE community_questions\n        SET is_active = FALSE, updated_at = NOW()\n        WHERE community_id = $1 AND is_active = TRUE\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "69826aecab9ddd09e766bfec0e2becb6ff9e31f1530c30dde274711bba03d3ae"
+}

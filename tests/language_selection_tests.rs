@@ -16,6 +16,7 @@ use verifier_bot::messages::Messages;
 struct FakeTelegramApi {
     sent_messages: Arc<Mutex<Vec<(i64, String)>>>,
     keyboards_sent: Arc<Mutex<Vec<(i64, String, Vec<Vec<(String, String)>>)>>>,
+    edited_messages_with_markup: Arc<Mutex<Vec<(i64, i32, String, Option<Vec<Vec<(String, String)>>>)>>>,
 }
 
 impl FakeTelegramApi {
@@ -23,6 +24,7 @@ impl FakeTelegramApi {
         Self {
             sent_messages: Arc::new(Mutex::new(Vec::new())),
             keyboards_sent: Arc::new(Mutex::new(Vec::new())),
+            edited_messages_with_markup: Arc::new(Mutex::new(vec![])),
         }
     }
 
@@ -115,6 +117,20 @@ impl TelegramApi for FakeTelegramApi {
             .lock()
             .expect("lock keyboards_sent")
             .push((chat_id, text, keyboard));
+        Ok(())
+    }
+
+    async fn edit_message_html_with_markup(
+        &self,
+        chat_id: i64,
+        message_id: i32,
+        text: String,
+        reply_markup: Option<Vec<Vec<(String, String)>>>,
+    ) -> Result<(), RequestError> {
+        self.edited_messages_with_markup
+            .lock()
+            .expect("lock edited_messages_with_markup")
+            .push((chat_id, message_id, text, reply_markup));
         Ok(())
     }
 }

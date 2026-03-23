@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE community_questions\n            SET question_text = $3,\n                question_text_uk = $4,\n                required = $5,\n                position = $6,\n                is_active = TRUE,\n                updated_at = NOW()\n            WHERE community_id = $1 AND question_key = $2\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Text",
+        "Text",
+        "Bool",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d9b8c2f12d99041ffb5048270537be5e4528d92656a73169eb3eb049a3017995"
+}

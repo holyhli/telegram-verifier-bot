@@ -13,6 +13,7 @@ use verifier_bot::services::expiry::process_tick;
 struct FakeTelegramApi {
     sent_messages: Arc<Mutex<Vec<(i64, String)>>>,
     declined_requests: Arc<Mutex<Vec<(i64, i64)>>>,
+    edited_messages_with_markup: Arc<Mutex<Vec<(i64, i32, String, Option<Vec<Vec<(String, String)>>>)>>>,
 }
 
 impl FakeTelegramApi {
@@ -20,6 +21,7 @@ impl FakeTelegramApi {
         Self {
             sent_messages: Arc::new(Mutex::new(Vec::new())),
             declined_requests: Arc::new(Mutex::new(Vec::new())),
+            edited_messages_with_markup: Arc::new(Mutex::new(vec![])),
         }
     }
 
@@ -87,6 +89,29 @@ impl TelegramApi for FakeTelegramApi {
         user_id: i64,
     ) -> Result<(), RequestError> {
         self.declined_requests.lock().unwrap().push((chat_id, user_id));
+        Ok(())
+    }
+
+    async fn edit_message_html_with_markup(
+        &self,
+        chat_id: i64,
+        message_id: i32,
+        text: String,
+        reply_markup: Option<Vec<Vec<(String, String)>>>,
+    ) -> Result<(), RequestError> {
+        self.edited_messages_with_markup
+            .lock()
+            .unwrap()
+            .push((chat_id, message_id, text, reply_markup));
+        Ok(())
+    }
+
+    async fn send_message_with_inline_keyboard(
+        &self,
+        _chat_id: i64,
+        _text: String,
+        _keyboard: Vec<Vec<(String, String)>>,
+    ) -> Result<(), RequestError> {
         Ok(())
     }
 }

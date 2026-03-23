@@ -18,6 +18,7 @@ struct FakeTelegramApi {
     keyboards_sent: Arc<Mutex<Vec<(i64, String, Vec<Vec<(String, String)>>)>>>,
     declined_requests: Arc<Mutex<Vec<(i64, i64)>>>,
     send_error: Arc<Mutex<Option<RequestError>>>,
+    edited_messages_with_markup: Arc<Mutex<Vec<(i64, i32, String, Option<Vec<Vec<(String, String)>>>)>>>,
 }
 
 impl FakeTelegramApi {
@@ -27,6 +28,7 @@ impl FakeTelegramApi {
             keyboards_sent: Arc::new(Mutex::new(Vec::new())),
             declined_requests: Arc::new(Mutex::new(Vec::new())),
             send_error: Arc::new(Mutex::new(None)),
+            edited_messages_with_markup: Arc::new(Mutex::new(vec![])),
         }
     }
 
@@ -144,6 +146,20 @@ impl TelegramApi for FakeTelegramApi {
             .lock()
             .expect("lock sent_messages")
             .push((chat_id, text));
+        Ok(())
+    }
+
+    async fn edit_message_html_with_markup(
+        &self,
+        chat_id: i64,
+        message_id: i32,
+        text: String,
+        reply_markup: Option<Vec<Vec<(String, String)>>>,
+    ) -> Result<(), RequestError> {
+        self.edited_messages_with_markup
+            .lock()
+            .expect("lock edited_messages_with_markup")
+            .push((chat_id, message_id, text, reply_markup));
         Ok(())
     }
 }
