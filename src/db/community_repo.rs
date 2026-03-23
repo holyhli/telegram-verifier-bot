@@ -55,4 +55,18 @@ impl CommunityRepo {
 
         Ok(questions)
     }
+
+    pub async fn find_all(pool: &PgPool) -> Result<Vec<Community>, AppError> {
+        let communities = sqlx::query_as!(
+            Community,
+            "SELECT id, telegram_chat_id, title, slug, is_active, created_at, updated_at
+             FROM communities
+             WHERE is_active = TRUE
+             ORDER BY title ASC"
+        )
+        .fetch_all(pool)
+        .await?;
+
+        Ok(communities)
+    }
 }

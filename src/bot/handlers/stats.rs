@@ -1,4 +1,17 @@
+use std::sync::Arc;
+
 use chrono::{DateTime, Duration, Utc};
+use sqlx::PgPool;
+use teloxide::prelude::Bot;
+use teloxide::types::Message;
+
+use crate::config::Config;
+use crate::db::CommunityRepo;
+use crate::error::AppError;
+use crate::services::stats::StatsService;
+use crate::services::stats_formatter::StatsFormatter;
+
+use super::{TelegramApi, TeloxideApi};
 
 /// Represents the time period for statistics
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -196,6 +209,213 @@ impl StatsCallbackData {
             _ => None,
         }
     }
+}
+
+const PAGE_SIZE: usize = 10;
+
+pub struct StatsCallbackInput {
+    pub chat_id: i64,
+    pub message_id: i32,
+    pub callback_query_id: String,
+    pub telegram_user_id: i64,
+    pub data: String,
+}
+
+pub async fn process_stats_callback(
+    api: &dyn TelegramApi,
+    pool: &PgPool,
+    config: &Config,
+    input: StatsCallbackInput,
+) -> Result<(), AppError> {
+    // 1. Authorization check
+    if !config.allowed_moderator_ids.contains(&input.telegram_user_id) {
+        let _ = api
+            .answer_callback_query(input.callback_query_id, "".to_string())
+            .await;
+        return Ok(());
+    }
+
+    // 2. Parse callback data
+    let callback = match StatsCallbackData::parse(&input.data) {
+        Some(cb) => cb,
+        None => return Ok(()),
+    };
+
+    // 3. Answer callback query first
+    let _ = api
+        .answer_callback_query(input.callback_query_id, "".to_string())
+        .await;
+
+    // 4. Handle callback
+    match callback {
+        StatsCallbackData::SelectCommunity { community_id } => {
+            let title = load_community_title(pool, community_id).await?;
+            let (text, keyboard) =
+                StatsFormatter::format_period_selection(&title, community_id);
+            api.edit_message_html_with_markup(
+                input.chat_id,
+                input.message_id,
+                text,
+                Some(keyboard),
+            )
+            .await
+            .map_err(|err| AppError::Telegram(err.to_string()))?;
+        }
+        StatsCallbackData::SelectPeriod {
+            community_id,
+            period,
+        } => {
+            let title = load_community_title(pool, community_id).await?;
+            let applicants =
+                StatsService::get_active_applicants(pool, community_id).await?;
+            let total_pages = ((applicants.len() + PAGE_SIZE - 1) / PAGE_SIZE).max(1) as u32;
+            let (text, keyboard) = StatsFormatter::format_active_view(
+                &title,
+                community_id,
+                &period,
+                &applicants,
+                1,
+                total_pages,
+            );
+            api.edit_message_html_with_markup(
+                input.chat_id,
+                input.message_id,
+                text,
+                Some(keyboard),
+            )
+            .await
+            .map_err(|err| AppError::Telegram(err.to_string()))?;
+        }
+        StatsCallbackData::Navigate {
+            community_id,
+            period,
+            view,
+            page,
+        } => {
+            let title = load_community_title(pool, community_id).await?;
+            match view {
+                StatsView::Active => {
+                    let applicants =
+                        StatsService::get_active_applicants(pool, community_id).await?;
+                    let total_pages =
+                        ((applicants.len() + PAGE_SIZE - 1) / PAGE_SIZE).max(1) as u32;
+                    let page = page.clamp(1, total_pages);
+                    let (text, keyboard) = StatsFormatter::format_active_view(
+                        &title,
+                        community_id,
+                        &period,
+                        &applicants,
+                        page,
+                        total_pages,
+                    );
+                    api.edit_message_html_with_markup(
+                        input.chat_id,
+                        input.message_id,
+                        text,
+                        Some(keyboard),
+                    )
+                    .await
+                    .map_err(|err| AppError::Telegram(err.to_string()))?;
+                }
+                StatsView::Summary => {
+                    let summaries = StatsService::get_period_summary(
+                        pool,
+                        community_id,
+                        period.start_date(),
+                    )
+                    .await?;
+                    let total_pages =
+                        ((summaries.len() + PAGE_SIZE - 1) / PAGE_SIZE).max(1) as u32;
+                    let page = page.clamp(1, total_pages);
+                    let (text, keyboard) = StatsFormatter::format_summary_view(
+                        &title,
+                        community_id,
+                        &period,
+                        &summaries,
+                        page,
+                        total_pages,
+                    );
+                    api.edit_message_html_with_markup(
+                        input.chat_id,
+                        input.message_id,
+                        text,
+                        Some(keyboard),
+                    )
+                    .await
+                    .map_err(|err| AppError::Telegram(err.to_string()))?;
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+async fn load_community_title(pool: &PgPool, community_id: i64) -> Result<String, AppError> {
+    let community = CommunityRepo::find_by_id(pool, community_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("community {community_id}")))?;
+    Ok(community.title)
+}
+
+#[derive(Debug, Clone)]
+pub struct StatsCommandInput {
+    pub chat_id: i64,
+    pub telegram_user_id: i64,
+}
+
+pub async fn handle_stats_command(
+    bot: Bot,
+    msg: Message,
+    pool: PgPool,
+    config: Arc<Config>,
+) -> Result<(), AppError> {
+    let Some(from) = msg.from.as_ref() else {
+        tracing::warn!("received /stats without sender");
+        return Ok(());
+    };
+
+    let input = StatsCommandInput {
+        chat_id: msg.chat.id.0,
+        telegram_user_id: from.id.0 as i64,
+    };
+
+    let api = TeloxideApi::new(bot);
+    process_stats_command(&api, &pool, &config, input).await
+}
+
+pub async fn process_stats_command(
+    api: &dyn TelegramApi,
+    pool: &PgPool,
+    config: &Config,
+    input: StatsCommandInput,
+) -> Result<(), AppError> {
+    if !config.allowed_moderator_ids.contains(&input.telegram_user_id) {
+        return Ok(());
+    }
+
+    let communities = CommunityRepo::find_all(pool).await?;
+
+    if communities.is_empty() {
+        return Ok(());
+    }
+
+    let (text, keyboard) = if communities.len() == 1 {
+        let c = &communities[0];
+        StatsFormatter::format_period_selection(&c.title, c.id)
+    } else {
+        let list: Vec<(i64, String)> = communities
+            .iter()
+            .map(|c| (c.id, c.title.clone()))
+            .collect();
+        StatsFormatter::format_community_selection(&list)
+    };
+
+    api.send_message_with_inline_keyboard(input.chat_id, text, keyboard)
+        .await
+        .map_err(|err| AppError::Telegram(err.to_string()))?;
+
+    Ok(())
 }
 
 #[cfg(test)]

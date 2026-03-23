@@ -1,0 +1,20 @@
+test formatter_tests::test_format_summary_view_with_warning ... ok
+test test_compute_per_question_timing ... ok
+test callback_handler_tests::test_stats_callback_community_selection ... ok
+test callback_handler_tests::test_stats_callback_navigation ... ok
+test callback_handler_tests::test_stats_callback_unauthorized ... ok
+test test_get_active_applicants ... ok
+test test_find_by_join_request_id ... ok
+test test_get_period_summary_filters_by_time ... ok
+test test_count_validation_failures ... ok
+test test_stats_command_unauthorized ... ok
+test tests::test_callback_data_fits_64_bytes ... ok
+test tests::test_callback_data_invalid_returns_none ... ok
+test tests::test_callback_data_roundtrip ... ok
+test tests::test_question_event_type_variants ... ok
+test test_stats_command_single_community ... ok
+test test_stats_command_multi_community ... ok
+test test_question_event_repo_create ... ok
+
+test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.32s
+

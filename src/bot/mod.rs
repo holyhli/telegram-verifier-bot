@@ -33,6 +33,14 @@ pub fn schema() -> UpdateHandler<AppError> {
             })
             .endpoint(handlers::start::handle_start),
         )
+        .branch(
+            teloxide::dptree::filter(|msg: Message| {
+                msg.text()
+                    .map(|text| text.trim_start().starts_with("/stats"))
+                    .unwrap_or(false)
+            })
+            .endpoint(handlers::stats::handle_stats_command),
+        )
         .endpoint(handlers::handle_private_message);
 
     teloxide::dptree::entry()

@@ -695,3 +695,539 @@ fn test_compute_per_question_timing() {
     assert_eq!(timings[1].duration_secs, Some(45));
     assert_eq!(timings[1].retry_count, 0);
 }
+
+// --- Stats Command & Callback Handler Tests ---
+
+use async_trait::async_trait;
+use std::sync::{Arc, Mutex};
+use teloxide::RequestError;
+use teloxide::types::InlineKeyboardMarkup;
+use verifier_bot::bot::handlers::TelegramApi;
+use verifier_bot::bot::handlers::stats::{StatsCallbackData, StatsCommandInput, StatsPeriod, process_stats_command};
+use verifier_bot::config::{Config, BotSettings};
+
+#[derive(Debug, Clone)]
+struct FakeTelegramApi {
+    sent_messages: Arc<Mutex<Vec<(i64, String)>>>,
+    keyboards_sent: Arc<Mutex<Vec<(i64, String, Vec<Vec<(String, String)>>)>>>,
+    sent_html_messages: Arc<Mutex<Vec<(i64, String, Option<InlineKeyboardMarkup>)>>>,
+    edited_messages_with_markup: Arc<Mutex<Vec<(i64, i32, String, Option<Vec<Vec<(String, String)>>>)>>>,
+    cleared_markup: Arc<Mutex<Vec<(i64, i64)>>>,
+    answered_callbacks: Arc<Mutex<Vec<(String, String)>>>,
+    approved_requests: Arc<Mutex<Vec<(i64, i64)>>>,
+    declined_requests: Arc<Mutex<Vec<(i64, i64)>>>,
+}
+
+impl FakeTelegramApi {
+    fn new() -> Self {
+        Self {
+            sent_messages: Arc::new(Mutex::new(Vec::new())),
+            keyboards_sent: Arc::new(Mutex::new(Vec::new())),
+            sent_html_messages: Arc::new(Mutex::new(Vec::new())),
+            edited_messages_with_markup: Arc::new(Mutex::new(vec![])),
+            cleared_markup: Arc::new(Mutex::new(Vec::new())),
+            answered_callbacks: Arc::new(Mutex::new(Vec::new())),
+            approved_requests: Arc::new(Mutex::new(Vec::new())),
+            declined_requests: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    fn keyboards_sent(&self) -> Vec<(i64, String, Vec<Vec<(String, String)>>)> {
+        self.keyboards_sent
+            .lock()
+            .expect("lock keyboards_sent")
+            .clone()
+    }
+
+    fn sent_messages(&self) -> Vec<(i64, String)> {
+        self.sent_messages
+            .lock()
+            .expect("lock sent_messages")
+            .clone()
+    }
+}
+
+#[async_trait]
+impl TelegramApi for FakeTelegramApi {
+    async fn send_message(&self, chat_id: i64, text: String) -> Result<(), RequestError> {
+        self.sent_messages.lock().unwrap().push((chat_id, text));
+        Ok(())
+    }
+
+    async fn send_message_html(
+        &self,
+        chat_id: i64,
+        text: String,
+        reply_markup: Option<InlineKeyboardMarkup>,
+    ) -> Result<i64, RequestError> {
+        let mut msgs = self.sent_html_messages.lock().unwrap();
+        msgs.push((chat_id, text, reply_markup));
+        Ok(msgs.len() as i64)
+    }
+
+    async fn edit_message_html(
+        &self,
+        _chat_id: i64,
+        _message_id: i64,
+        _text: String,
+    ) -> Result<(), RequestError> {
+        Ok(())
+    }
+
+    async fn edit_message_html_with_markup(
+        &self,
+        chat_id: i64,
+        message_id: i32,
+        text: String,
+        reply_markup: Option<Vec<Vec<(String, String)>>>,
+    ) -> Result<(), RequestError> {
+        self.edited_messages_with_markup.lock().unwrap().push((chat_id, message_id, text, reply_markup));
+        Ok(())
+    }
+
+    async fn clear_message_reply_markup(
+        &self,
+        chat_id: i64,
+        message_id: i64,
+    ) -> Result<(), RequestError> {
+        self.cleared_markup.lock().unwrap().push((chat_id, message_id));
+        Ok(())
+    }
+
+    async fn answer_callback_query(
+        &self,
+        callback_query_id: String,
+        text: String,
+    ) -> Result<(), RequestError> {
+        self.answered_callbacks.lock().unwrap().push((callback_query_id, text));
+        Ok(())
+    }
+
+    async fn approve_chat_join_request(
+        &self,
+        chat_id: i64,
+        user_id: i64,
+    ) -> Result<(), RequestError> {
+        self.approved_requests.lock().unwrap().push((chat_id, user_id));
+        Ok(())
+    }
+
+    async fn decline_chat_join_request(
+        &self,
+        chat_id: i64,
+        user_id: i64,
+    ) -> Result<(), RequestError> {
+        self.declined_requests.lock().unwrap().push((chat_id, user_id));
+        Ok(())
+    }
+
+    async fn send_message_with_inline_keyboard(
+        &self,
+        chat_id: i64,
+        text: String,
+        keyboard: Vec<Vec<(String, String)>>,
+    ) -> Result<(), RequestError> {
+        self.keyboards_sent
+            .lock()
+            .expect("lock keyboards_sent")
+            .push((chat_id, text.clone(), keyboard));
+        self.sent_messages
+            .lock()
+            .expect("lock sent_messages")
+            .push((chat_id, text));
+        Ok(())
+    }
+}
+
+fn make_test_config(moderator_ids: Vec<i64>) -> Config {
+    Config {
+        bot_token: "test".to_string(),
+        database_url: "test".to_string(),
+        default_moderator_chat_id: -100999,
+        allowed_moderator_ids: moderator_ids,
+        use_webhooks: false,
+        public_webhook_url: None,
+        server_port: 8080,
+        rust_log: "info".to_string(),
+        bot_settings: BotSettings::default(),
+        communities: vec![],
+    }
+}
+
+async fn seed_community_with_title(pool: &PgPool, chat_id: i64, title: &str, slug: &str) -> i64 {
+    let (id,): (i64,) = sqlx::query_as(
+        "INSERT INTO communities (telegram_chat_id, title, slug)
+         VALUES ($1, $2, $3) RETURNING id",
+    )
+    .bind(chat_id)
+    .bind(title)
+    .bind(slug)
+    .fetch_one(pool)
+    .await
+    .expect("seed community with title");
+    id
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn test_stats_command_multi_community(pool: PgPool) -> sqlx::Result<()> {
+    let id1 = seed_community_with_title(&pool, -1009111111111, "Alpha Community", "alpha").await;
+    let id2 = seed_community_with_title(&pool, -1009222222222, "Beta Community", "beta").await;
+
+    let config = make_test_config(vec![12345]);
+    let api = FakeTelegramApi::new();
+
+    let input = StatsCommandInput {
+        chat_id: 99999,
+        telegram_user_id: 12345,
+    };
+
+    process_stats_command(&api, &pool, &config, input)
+        .await
+        .expect("process_stats_command");
+
+    let keyboards = api.keyboards_sent();
+    assert_eq!(keyboards.len(), 1, "should send exactly one keyboard message");
+
+    let (chat_id, text, keyboard) = &keyboards[0];
+    assert_eq!(*chat_id, 99999);
+    assert!(text.contains("Select a community"));
+
+    // Should have 2 rows (one per community)
+    assert_eq!(keyboard.len(), 2);
+    assert_eq!(keyboard[0][0].0, "Alpha Community");
+    assert_eq!(keyboard[1][0].0, "Beta Community");
+
+    // Verify callback data encodes correctly
+    let cb1 = StatsCallbackData::parse(&keyboard[0][0].1).unwrap();
+    assert_eq!(cb1, StatsCallbackData::SelectCommunity { community_id: id1 });
+    let cb2 = StatsCallbackData::parse(&keyboard[1][0].1).unwrap();
+    assert_eq!(cb2, StatsCallbackData::SelectCommunity { community_id: id2 });
+
+    Ok(())
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn test_stats_command_single_community(pool: PgPool) -> sqlx::Result<()> {
+    let id = seed_community_with_title(&pool, -1009333333333, "Solo Community", "solo").await;
+
+    let config = make_test_config(vec![12345]);
+    let api = FakeTelegramApi::new();
+
+    let input = StatsCommandInput {
+        chat_id: 88888,
+        telegram_user_id: 12345,
+    };
+
+    process_stats_command(&api, &pool, &config, input)
+        .await
+        .expect("process_stats_command");
+
+    let keyboards = api.keyboards_sent();
+    assert_eq!(keyboards.len(), 1, "should send exactly one keyboard message");
+
+    let (chat_id, text, keyboard) = &keyboards[0];
+    assert_eq!(*chat_id, 88888);
+    assert!(text.contains("Solo Community"));
+    assert!(text.contains("Select time period"));
+
+    // Should have 2x2 grid (4 period buttons)
+    assert_eq!(keyboard.len(), 2);
+    assert_eq!(keyboard[0].len(), 2);
+    assert_eq!(keyboard[1].len(), 2);
+
+    // Verify period buttons
+    assert_eq!(keyboard[0][0].0, "Today");
+    assert_eq!(keyboard[0][1].0, "This Week");
+    assert_eq!(keyboard[1][0].0, "This Month");
+    assert_eq!(keyboard[1][1].0, "All Time");
+
+    // Verify callback data for first period button
+    let cb = StatsCallbackData::parse(&keyboard[0][0].1).unwrap();
+    assert_eq!(
+        cb,
+        StatsCallbackData::SelectPeriod {
+            community_id: id,
+            period: StatsPeriod::Today,
+        }
+    );
+
+    Ok(())
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn test_stats_command_unauthorized(pool: PgPool) -> sqlx::Result<()> {
+    seed_community_with_title(&pool, -1009444444444, "Test Community", "test-unauth").await;
+
+    let config = make_test_config(vec![12345]);
+    let api = FakeTelegramApi::new();
+
+    let input = StatsCommandInput {
+        chat_id: 77777,
+        telegram_user_id: 99999, // NOT in allowed list
+    };
+
+    process_stats_command(&api, &pool, &config, input)
+        .await
+        .expect("process_stats_command");
+
+    // Should NOT send any messages
+    let messages = api.sent_messages();
+    assert!(messages.is_empty(), "unauthorized user should get no messages");
+
+    let keyboards = api.keyboards_sent();
+    assert!(keyboards.is_empty(), "unauthorized user should get no keyboards");
+
+    Ok(())
+}
+
+// --- Stats Callback Handler Tests ---
+
+mod callback_handler_tests {
+    use sqlx::PgPool;
+    use async_trait::async_trait;
+    use std::sync::{Arc, Mutex};
+    use teloxide::RequestError;
+    use teloxide::types::InlineKeyboardMarkup;
+
+    use verifier_bot::bot::handlers::TelegramApi;
+    use verifier_bot::bot::handlers::stats::{process_stats_callback, StatsCallbackInput};
+    use verifier_bot::config::{BotSettings, Config};
+
+    use super::{seed_community, seed_question};
+
+    #[derive(Debug, Clone)]
+    struct FakeCallbackApi {
+        answered_callbacks: Arc<Mutex<Vec<(String, String)>>>,
+        edited_messages_with_markup: Arc<Mutex<Vec<(i64, i32, String, Option<Vec<Vec<(String, String)>>>)>>>,
+    }
+
+    impl FakeCallbackApi {
+        fn new() -> Self {
+            Self {
+                answered_callbacks: Arc::new(Mutex::new(Vec::new())),
+                edited_messages_with_markup: Arc::new(Mutex::new(Vec::new())),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl TelegramApi for FakeCallbackApi {
+        async fn send_message(&self, _chat_id: i64, _text: String) -> Result<(), RequestError> {
+            Ok(())
+        }
+
+        async fn send_message_html(
+            &self,
+            _chat_id: i64,
+            _text: String,
+            _reply_markup: Option<InlineKeyboardMarkup>,
+        ) -> Result<i64, RequestError> {
+            Ok(1)
+        }
+
+        async fn edit_message_html(
+            &self,
+            _chat_id: i64,
+            _message_id: i64,
+            _text: String,
+        ) -> Result<(), RequestError> {
+            Ok(())
+        }
+
+        async fn edit_message_html_with_markup(
+            &self,
+            chat_id: i64,
+            message_id: i32,
+            text: String,
+            reply_markup: Option<Vec<Vec<(String, String)>>>,
+        ) -> Result<(), RequestError> {
+            self.edited_messages_with_markup.lock().unwrap().push((chat_id, message_id, text, reply_markup));
+            Ok(())
+        }
+
+        async fn clear_message_reply_markup(
+            &self,
+            _chat_id: i64,
+            _message_id: i64,
+        ) -> Result<(), RequestError> {
+            Ok(())
+        }
+
+        async fn answer_callback_query(
+            &self,
+            callback_query_id: String,
+            text: String,
+        ) -> Result<(), RequestError> {
+            self.answered_callbacks.lock().unwrap().push((callback_query_id, text));
+            Ok(())
+        }
+
+        async fn approve_chat_join_request(
+            &self,
+            _chat_id: i64,
+            _user_id: i64,
+        ) -> Result<(), RequestError> {
+            Ok(())
+        }
+
+        async fn decline_chat_join_request(
+            &self,
+            _chat_id: i64,
+            _user_id: i64,
+        ) -> Result<(), RequestError> {
+            Ok(())
+        }
+
+        async fn send_message_with_inline_keyboard(
+            &self,
+            _chat_id: i64,
+            _text: String,
+            _keyboard: Vec<Vec<(String, String)>>,
+        ) -> Result<(), RequestError> {
+            Ok(())
+        }
+    }
+
+    fn cb_test_config(allowed_moderator_ids: Vec<i64>) -> Config {
+        Config {
+            bot_token: "token".to_string(),
+            database_url: "postgres://example".to_string(),
+            default_moderator_chat_id: -100_999_000_111,
+            allowed_moderator_ids,
+            use_webhooks: false,
+            public_webhook_url: None,
+            server_port: 8080,
+            rust_log: "info".to_string(),
+            bot_settings: BotSettings::default(),
+            communities: vec![],
+        }
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn test_stats_callback_community_selection(pool: PgPool) -> sqlx::Result<()> {
+        let community_id = seed_community(&pool).await;
+        let api = FakeCallbackApi::new();
+        let config = cb_test_config(vec![9001]);
+
+        let input = StatsCallbackInput {
+            chat_id: -100_999_000_111,
+            message_id: 42,
+            callback_query_id: "cb-stats-1".to_string(),
+            telegram_user_id: 9001,
+            data: format!("sc:{}", community_id),
+        };
+
+        process_stats_callback(&api, &pool, &config, input)
+            .await
+            .expect("stats callback should succeed");
+
+        // Verify callback was answered
+        let callbacks = api.answered_callbacks.lock().unwrap().clone();
+        assert_eq!(callbacks.len(), 1);
+        assert_eq!(callbacks[0].0, "cb-stats-1");
+
+        // Verify message was edited with period selection keyboard
+        let edits = api.edited_messages_with_markup.lock().unwrap().clone();
+        assert_eq!(edits.len(), 1);
+        assert_eq!(edits[0].0, -100_999_000_111);
+        assert_eq!(edits[0].1, 42);
+        assert!(edits[0].2.contains("Select time period"));
+        assert!(edits[0].2.contains("Stats Test Community"));
+
+        // Verify keyboard has period buttons
+        let keyboard = edits[0].3.as_ref().expect("keyboard present");
+        let flat: Vec<&(String, String)> = keyboard.iter().flat_map(|r| r.iter()).collect();
+        assert_eq!(flat.len(), 4); // Today, This Week, This Month, All Time
+        assert!(flat.iter().any(|(label, _)| label == "Today"));
+        assert!(flat.iter().any(|(label, _)| label == "All Time"));
+
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn test_stats_callback_period_selection(pool: PgPool) -> sqlx::Result<()> {
+        let community_id = seed_community(&pool).await;
+        let _q1 = seed_question(&pool, community_id, 1).await;
+        let api = FakeCallbackApi::new();
+        let config = cb_test_config(vec![9002]);
+
+        let input = StatsCallbackInput {
+            chat_id: -100_999_000_111,
+            message_id: 43,
+            callback_query_id: "cb-stats-2".to_string(),
+            telegram_user_id: 9002,
+            data: format!("sp:{}:w", community_id),
+        };
+
+        process_stats_callback(&api, &pool, &config, input)
+            .await
+            .expect("stats period callback should succeed");
+
+        // Verify message was edited with active view
+        let edits = api.edited_messages_with_markup.lock().unwrap().clone();
+        assert_eq!(edits.len(), 1);
+        assert!(edits[0].2.contains("Active (This Week)"));
+        assert!(edits[0].2.contains("Stats Test Community"));
+
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn test_stats_callback_navigation(pool: PgPool) -> sqlx::Result<()> {
+        let community_id = seed_community(&pool).await;
+        let _q1 = seed_question(&pool, community_id, 1).await;
+        let api = FakeCallbackApi::new();
+        let config = cb_test_config(vec![9003]);
+
+        // Navigate to summary view
+        let input = StatsCallbackInput {
+            chat_id: -100_999_000_111,
+            message_id: 44,
+            callback_query_id: "cb-stats-3".to_string(),
+            telegram_user_id: 9003,
+            data: format!("sn:{}:w:s:1", community_id),
+        };
+
+        process_stats_callback(&api, &pool, &config, input)
+            .await
+            .expect("stats navigation callback should succeed");
+
+        // Verify summary view shown
+        let edits = api.edited_messages_with_markup.lock().unwrap().clone();
+        assert_eq!(edits.len(), 1);
+        assert!(edits[0].2.contains("Summary (This Week)"));
+        assert!(edits[0].2.contains("Stats Test Community"));
+
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn test_stats_callback_unauthorized(pool: PgPool) -> sqlx::Result<()> {
+        let community_id = seed_community(&pool).await;
+        let api = FakeCallbackApi::new();
+        // Config with moderator 9004 -- caller will be 7777 (not authorized)
+        let config = cb_test_config(vec![9004]);
+
+        let input = StatsCallbackInput {
+            chat_id: -100_999_000_111,
+            message_id: 45,
+            callback_query_id: "cb-stats-unauth".to_string(),
+            telegram_user_id: 7777,
+            data: format!("sc:{}", community_id),
+        };
+
+        process_stats_callback(&api, &pool, &config, input)
+            .await
+            .expect("unauthorized callback should succeed without error");
+
+        // Callback should still be answered (silently)
+        let callbacks = api.answered_callbacks.lock().unwrap().clone();
+        assert_eq!(callbacks.len(), 1);
+
+        // No message edit should have happened
+        let edits = api.edited_messages_with_markup.lock().unwrap().clone();
+        assert_eq!(edits.len(), 0);
+
+        Ok(())
+    }
+}
