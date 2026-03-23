@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use chrono::Utc;
 use sqlx::PgPool;
 use std::sync::{Arc, Mutex};
 use teloxide::RequestError;
@@ -8,7 +7,7 @@ use verifier_bot::bot::handlers::join_request::{process_join_request, JoinReques
 use verifier_bot::bot::handlers::language_selection::process_language_selection_callback;
 use verifier_bot::bot::handlers::questionnaire::{process_private_message, PrivateMessageInput};
 use verifier_bot::bot::handlers::TelegramApi;
-use verifier_bot::db::{ApplicantRepo, CommunityRepo, JoinRequestRepo, SessionRepo};
+use verifier_bot::db::{CommunityRepo, JoinRequestRepo, SessionRepo};
 use verifier_bot::domain::{JoinRequestStatus, Language};
 use verifier_bot::messages::Messages;
 
@@ -169,8 +168,8 @@ async fn seed_community_with_questions(pool: &PgPool) -> i64 {
 async fn seed_applicant(pool: &PgPool, telegram_user_id: i64, first_name: &str) -> i64 {
     sqlx::query_scalar!(
         r#"
-        INSERT INTO applicants (telegram_user_id, telegram_user_chat_id, first_name, username, created_at, updated_at)
-        VALUES ($1, $1, $2, 'testuser', NOW(), NOW())
+        INSERT INTO applicants (telegram_user_id, first_name, username, created_at, updated_at)
+        VALUES ($1, $2, 'testuser', NOW(), NOW())
         RETURNING id
         "#,
         telegram_user_id,
@@ -186,16 +185,18 @@ async fn seed_join_request(
     pool: &PgPool,
     applicant_id: i64,
     community_id: i64,
+    telegram_user_chat_id: i64,
     status: &str,
 ) -> i64 {
     sqlx::query_scalar!(
         r#"
-        INSERT INTO join_requests (applicant_id, community_id, status, created_at, updated_at)
-        VALUES ($1, $2, $3, NOW(), NOW())
+        INSERT INTO join_requests (applicant_id, community_id, telegram_user_chat_id, status, telegram_join_request_date, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, NOW(), NOW(), NOW())
         RETURNING id
         "#,
         applicant_id,
         community_id,
+        telegram_user_chat_id,
         status
     )
     .fetch_one(pool)
@@ -209,22 +210,17 @@ async fn language_selection_full_flow_english(pool: PgPool) {
     let community_id = seed_community_with_questions(&pool).await;
     let telegram_user_id = 123456789i64;
     let applicant_id = seed_applicant(&pool, telegram_user_id, "Alice").await;
-    let join_request_id = seed_join_request(&pool, applicant_id, community_id, "pending_contact").await;
+    let join_request_id = seed_join_request(&pool, applicant_id, community_id, telegram_user_id, "pending_contact").await;
 
     let api = FakeTelegramApi::new();
-    let join_request_repo = JoinRequestRepo::new(pool.clone());
-    let session_repo = SessionRepo::new(pool.clone());
-    let community_repo = CommunityRepo::new(pool.clone());
 
     // Step 1: Process language selection callback (English)
     process_language_selection_callback(
         &api,
-        &join_request_repo,
-        &session_repo,
-        &community_repo,
-        telegram_user_id,
-        telegram_user_id,
+        &pool,
         "callback_123".to_string(),
+        telegram_user_id,
+        telegram_user_id,
         "lang:en".to_string(),
     )
     .await
@@ -233,7 +229,7 @@ async fn language_selection_full_flow_english(pool: PgPool) {
     // Verify session created with English language
     let session = sqlx::query!(
         r#"
-        SELECT language as "language: Language", current_position
+        SELECT language as "language: Language", current_question_position
         FROM applicant_sessions
         WHERE join_request_id = $1
         "#,
@@ -244,7 +240,7 @@ async fn language_selection_full_flow_english(pool: PgPool) {
     .expect("fetch session");
 
     assert_eq!(session.language, Language::English);
-    assert_eq!(session.current_position, 1);
+    assert_eq!(session.current_question_position, 2);
 
     // Verify join request status transitioned to questionnaire_in_progress
     let join_request = sqlx::query!(
@@ -267,68 +263,39 @@ async fn language_selection_full_flow_english(pool: PgPool) {
     let (chat_id, text) = &messages[0];
     assert_eq!(*chat_id, telegram_user_id);
     assert!(text.contains("Hi Alice!"));
-    assert!(text.contains("What is your name?"));
-    assert!(!text.contains("Як вас звати?"));
-
-    // Step 2: Answer first question
-    let applicant_repo = ApplicantRepo::new(pool.clone());
-    process_private_message(
-        &api,
-        &applicant_repo,
-        &join_request_repo,
-        &session_repo,
-        &community_repo,
-        PrivateMessageInput {
-            telegram_user_id,
-            telegram_user_chat_id: telegram_user_id,
-            message_text: "Alice Smith".to_string(),
-        },
-    )
-    .await
-    .expect("process answer");
-
-    // Verify second question sent in English
-    let messages = api.sent_messages();
-    assert_eq!(messages.len(), 2);
-    let (_, text) = &messages[1];
     assert!(text.contains("What do you do?"));
     assert!(!text.contains("Чим ви займаєтесь?"));
 
-    // Step 3: Answer second question
+    // Step 2: Answer second question (first question was answered via name prompt)
     process_private_message(
         &api,
-        &applicant_repo,
-        &join_request_repo,
-        &session_repo,
-        &community_repo,
+        &pool,
         PrivateMessageInput {
+            chat_id: telegram_user_id,
             telegram_user_id,
-            telegram_user_chat_id: telegram_user_id,
-            message_text: "Software Engineer".to_string(),
+            text: "Software Engineer".to_string(),
         },
+        1234567890i64,
     )
     .await
     .expect("process answer");
 
     // Verify third question sent in English
     let messages = api.sent_messages();
-    assert_eq!(messages.len(), 3);
-    let (_, text) = &messages[2];
+    assert_eq!(messages.len(), 2);
+    let (_, text) = &messages[1];
     assert!(text.contains("How did you hear about us?"));
     assert!(!text.contains("Як ви про нас дізналися?"));
-
-    // Step 4: Answer third question
+    // Step 3: Answer third question
     process_private_message(
         &api,
-        &applicant_repo,
-        &join_request_repo,
-        &session_repo,
-        &community_repo,
+        &pool,
         PrivateMessageInput {
+            chat_id: telegram_user_id,
             telegram_user_id,
-            telegram_user_chat_id: telegram_user_id,
-            message_text: "From a friend".to_string(),
+            text: "From a friend".to_string(),
         },
+        1234567890i64,
     )
     .await
     .expect("process answer");
@@ -336,7 +303,7 @@ async fn language_selection_full_flow_english(pool: PgPool) {
     // Verify completion message sent in English
     let messages = api.sent_messages();
     assert_eq!(messages.len(), 4);
-    let (_, text) = &messages[3];
+    let (_, text) = &messages[2];
     let expected_completion = Messages::completion_message(Language::English);
     assert!(text.contains(&expected_completion));
     assert!(!text.contains("Дякуємо"));
@@ -359,10 +326,11 @@ async fn language_selection_full_flow_english(pool: PgPool) {
     // Verify all answers stored
     let answers = sqlx::query!(
         r#"
-        SELECT question_key, answer_text
-        FROM join_request_answers
-        WHERE join_request_id = $1
-        ORDER BY question_key
+        SELECT cq.question_key, jra.answer_text
+        FROM join_request_answers jra
+        JOIN community_questions cq ON jra.community_question_id = cq.id
+        WHERE jra.join_request_id = $1
+        ORDER BY cq.question_key
         "#,
         join_request_id
     )
@@ -372,7 +340,7 @@ async fn language_selection_full_flow_english(pool: PgPool) {
 
     assert_eq!(answers.len(), 3);
     assert_eq!(answers[0].question_key, "name");
-    assert_eq!(answers[0].answer_text, "Alice Smith");
+    assert_eq!(answers[0].answer_text, "Alice");
     assert_eq!(answers[1].question_key, "occupation");
     assert_eq!(answers[1].answer_text, "Software Engineer");
     assert_eq!(answers[2].question_key, "referral");
@@ -385,22 +353,17 @@ async fn language_selection_full_flow_ukrainian(pool: PgPool) {
     let community_id = seed_community_with_questions(&pool).await;
     let telegram_user_id = 987654321i64;
     let applicant_id = seed_applicant(&pool, telegram_user_id, "Богдан").await;
-    let join_request_id = seed_join_request(&pool, applicant_id, community_id, "pending_contact").await;
+    let join_request_id = seed_join_request(&pool, applicant_id, community_id, telegram_user_id, "pending_contact").await;
 
     let api = FakeTelegramApi::new();
-    let join_request_repo = JoinRequestRepo::new(pool.clone());
-    let session_repo = SessionRepo::new(pool.clone());
-    let community_repo = CommunityRepo::new(pool.clone());
 
     // Step 1: Process language selection callback (Ukrainian)
     process_language_selection_callback(
         &api,
-        &join_request_repo,
-        &session_repo,
-        &community_repo,
-        telegram_user_id,
-        telegram_user_id,
+        &pool,
         "callback_456".to_string(),
+        telegram_user_id,
+        telegram_user_id,
         "lang:uk".to_string(),
     )
     .await
@@ -409,7 +372,7 @@ async fn language_selection_full_flow_ukrainian(pool: PgPool) {
     // Verify session created with Ukrainian language
     let session = sqlx::query!(
         r#"
-        SELECT language as "language: Language", current_position
+        SELECT language as "language: Language", current_question_position
         FROM applicant_sessions
         WHERE join_request_id = $1
         "#,
@@ -420,7 +383,7 @@ async fn language_selection_full_flow_ukrainian(pool: PgPool) {
     .expect("fetch session");
 
     assert_eq!(session.language, Language::Ukrainian);
-    assert_eq!(session.current_position, 1);
+    assert_eq!(session.current_question_position, 2);
 
     // Verify join request status transitioned to questionnaire_in_progress
     let join_request = sqlx::query!(
@@ -443,68 +406,39 @@ async fn language_selection_full_flow_ukrainian(pool: PgPool) {
     let (chat_id, text) = &messages[0];
     assert_eq!(*chat_id, telegram_user_id);
     assert!(text.contains("Привіт, Богдан!"));
-    assert!(text.contains("Як вас звати?"));
-    assert!(!text.contains("What is your name?"));
-
-    // Step 2: Answer first question
-    let applicant_repo = ApplicantRepo::new(pool.clone());
-    process_private_message(
-        &api,
-        &applicant_repo,
-        &join_request_repo,
-        &session_repo,
-        &community_repo,
-        PrivateMessageInput {
-            telegram_user_id,
-            telegram_user_chat_id: telegram_user_id,
-            message_text: "Богдан Коваленко".to_string(),
-        },
-    )
-    .await
-    .expect("process answer");
-
-    // Verify second question sent in Ukrainian
-    let messages = api.sent_messages();
-    assert_eq!(messages.len(), 2);
-    let (_, text) = &messages[1];
     assert!(text.contains("Чим ви займаєтесь?"));
     assert!(!text.contains("What do you do?"));
 
-    // Step 3: Answer second question
+    // Step 2: Answer second question (first question was answered via name prompt)
     process_private_message(
         &api,
-        &applicant_repo,
-        &join_request_repo,
-        &session_repo,
-        &community_repo,
+        &pool,
         PrivateMessageInput {
+            chat_id: telegram_user_id,
             telegram_user_id,
-            telegram_user_chat_id: telegram_user_id,
-            message_text: "Розробник програмного забезпечення".to_string(),
+            text: "Розробник програмного забезпечення".to_string(),
         },
+        1234567890i64,
     )
     .await
     .expect("process answer");
 
     // Verify third question sent in Ukrainian
     let messages = api.sent_messages();
-    assert_eq!(messages.len(), 3);
-    let (_, text) = &messages[2];
+    assert_eq!(messages.len(), 2);
+    let (_, text) = &messages[1];
     assert!(text.contains("Як ви про нас дізналися?"));
     assert!(!text.contains("How did you hear about us?"));
-
-    // Step 4: Answer third question
+    // Step 3: Answer third question
     process_private_message(
         &api,
-        &applicant_repo,
-        &join_request_repo,
-        &session_repo,
-        &community_repo,
+        &pool,
         PrivateMessageInput {
+            chat_id: telegram_user_id,
             telegram_user_id,
-            telegram_user_chat_id: telegram_user_id,
-            message_text: "Від друга".to_string(),
+            text: "Від друга".to_string(),
         },
+        1234567890i64,
     )
     .await
     .expect("process answer");
@@ -512,10 +446,10 @@ async fn language_selection_full_flow_ukrainian(pool: PgPool) {
     // Verify completion message sent in Ukrainian
     let messages = api.sent_messages();
     assert_eq!(messages.len(), 4);
-    let (_, text) = &messages[3];
+    let (_, text) = &messages[2];
     let expected_completion = Messages::completion_message(Language::Ukrainian);
     assert!(text.contains(&expected_completion));
-    assert!(text.contains("Дякуємо"));
+    assert!(text.contains("Дяку"));
     assert!(!text.contains("Thank you"));
 
     // Verify join request status transitioned to submitted
@@ -536,10 +470,11 @@ async fn language_selection_full_flow_ukrainian(pool: PgPool) {
     // Verify all answers stored
     let answers = sqlx::query!(
         r#"
-        SELECT question_key, answer_text
-        FROM join_request_answers
-        WHERE join_request_id = $1
-        ORDER BY question_key
+        SELECT cq.question_key, jra.answer_text
+        FROM join_request_answers jra
+        JOIN community_questions cq ON jra.community_question_id = cq.id
+        WHERE jra.join_request_id = $1
+        ORDER BY cq.question_key
         "#,
         join_request_id
     )
@@ -549,7 +484,7 @@ async fn language_selection_full_flow_ukrainian(pool: PgPool) {
 
     assert_eq!(answers.len(), 3);
     assert_eq!(answers[0].question_key, "name");
-    assert_eq!(answers[0].answer_text, "Богдан Коваленко");
+    assert_eq!(answers[0].answer_text, "Богдан");
     assert_eq!(answers[1].question_key, "occupation");
     assert_eq!(answers[1].answer_text, "Розробник програмного забезпечення");
     assert_eq!(answers[2].question_key, "referral");
@@ -562,23 +497,17 @@ async fn language_selection_validation_errors_respect_language(pool: PgPool) {
     let community_id = seed_community_with_questions(&pool).await;
     let telegram_user_id = 111222333i64;
     let applicant_id = seed_applicant(&pool, telegram_user_id, "Олена").await;
-    let join_request_id = seed_join_request(&pool, applicant_id, community_id, "pending_contact").await;
+    let join_request_id = seed_join_request(&pool, applicant_id, community_id, telegram_user_id, "pending_contact").await;
 
     let api = FakeTelegramApi::new();
-    let join_request_repo = JoinRequestRepo::new(pool.clone());
-    let session_repo = SessionRepo::new(pool.clone());
-    let community_repo = CommunityRepo::new(pool.clone());
-    let applicant_repo = ApplicantRepo::new(pool.clone());
 
     // Step 1: Select Ukrainian language
     process_language_selection_callback(
         &api,
-        &join_request_repo,
-        &session_repo,
-        &community_repo,
-        telegram_user_id,
-        telegram_user_id,
+        &pool,
         "callback_789".to_string(),
+        telegram_user_id,
+        telegram_user_id,
         "lang:uk".to_string(),
     )
     .await
@@ -587,15 +516,13 @@ async fn language_selection_validation_errors_respect_language(pool: PgPool) {
     // Step 2: Try to submit empty answer (required field)
     process_private_message(
         &api,
-        &applicant_repo,
-        &join_request_repo,
-        &session_repo,
-        &community_repo,
+        &pool,
         PrivateMessageInput {
+            chat_id: telegram_user_id,
             telegram_user_id,
-            telegram_user_chat_id: telegram_user_id,
-            message_text: "".to_string(),
+            text: "".to_string(),
         },
+        1234567890i64,
     )
     .await
     .expect("process empty answer");
@@ -612,15 +539,13 @@ async fn language_selection_validation_errors_respect_language(pool: PgPool) {
     // Step 3: Try to submit too short answer
     process_private_message(
         &api,
-        &applicant_repo,
-        &join_request_repo,
-        &session_repo,
-        &community_repo,
+        &pool,
         PrivateMessageInput {
+            chat_id: telegram_user_id,
             telegram_user_id,
-            telegram_user_chat_id: telegram_user_id,
-            message_text: "A".to_string(),
+            text: "A".to_string(),
         },
+        1234567890i64,
     )
     .await
     .expect("process short answer");
@@ -631,21 +556,19 @@ async fn language_selection_validation_errors_respect_language(pool: PgPool) {
     let (_, error_text) = &messages[2];
     let expected_error = Messages::min_length_error(Language::Ukrainian);
     assert_eq!(error_text, &expected_error);
-    assert!(error_text.contains("Будь ласка, надайте більш детальну відповідь"));
-    assert!(!error_text.contains("Please provide a more detailed answer"));
+    assert!(error_text.contains("Твоя відповідь має містити хоча б 2 символи"));
+    assert!(!error_text.contains("Your answer must be at least 2 characters long."));
 
     // Step 4: Try to submit low effort answer
     process_private_message(
         &api,
-        &applicant_repo,
-        &join_request_repo,
-        &session_repo,
-        &community_repo,
+        &pool,
         PrivateMessageInput {
+            chat_id: telegram_user_id,
             telegram_user_id,
-            telegram_user_chat_id: telegram_user_id,
-            message_text: "aaa".to_string(),
+            text: "aaa".to_string(),
         },
+        1234567890i64,
     )
     .await
     .expect("process low effort answer");
@@ -656,6 +579,6 @@ async fn language_selection_validation_errors_respect_language(pool: PgPool) {
     let (_, error_text) = &messages[3];
     let expected_error = Messages::low_effort_error(Language::Ukrainian);
     assert_eq!(error_text, &expected_error);
-    assert!(error_text.contains("Будь ласка, надайте більш змістовну відповідь"));
-    assert!(!error_text.contains("Please provide a more meaningful answer"));
+    assert!(error_text.contains("Будь ласка, дай більш детальну відповідь"));
+    assert!(!error_text.contains("Please provide a more detailed answer."));
 }

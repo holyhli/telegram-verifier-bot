@@ -61,3 +61,27 @@
 - `second_question` is `Option<&CommunityQuestion>` — must wrap with `if let Some(q)` guard
 - All event failures use `if let Err(e) = ... { tracing::error!(...) }` — never propagate to user
 - 27 tests pass with 0 failures after instrumentation
+
+## Task 9: Stats Callback Handlers & Routing
+- `process_stats_callback` handles 3 callback types: SelectCommunity, SelectPeriod, Navigate
+- Authorization check first, then parse, then answer callback, then handle
+- `load_community_title()` helper uses CommunityRepo::find_by_id → extracts title
+- Pagination: PAGE_SIZE=10, total_pages = ((count + PAGE_SIZE - 1) / PAGE_SIZE).max(1)
+- Page clamping: `page.clamp(1, total_pages)` prevents out-of-range
+- Callback routing added BEFORE existing `lang:` check in callbacks.rs
+- Stats prefixes: `sc:`, `sp:`, `sn:` — checked with `starts_with`
+- Test module `callback_handler_tests` uses `FakeCallbackApi` (distinct from existing `FakeTelegramApi`) to avoid name conflict
+- `super::seed_community` and `super::seed_question` reused from outer scope
+- All 26 stats tests pass, all 12 moderation tests pass — no regressions
+
+## Task 8: /stats Command Handler
+- `handle_stats_command` follows exact `start.rs` pattern: wraps teloxide types → calls `process_stats_command`
+- Signature: `(bot: Bot, msg: Message, pool: PgPool, config: Arc<Config>) -> Result<(), AppError>`
+- `process_stats_command` takes `&dyn TelegramApi` for testability — same as other handlers
+- Access control: check `config.allowed_moderator_ids.contains()` — return Ok(()) silently if unauthorized
+- Added `CommunityRepo::find_all(pool)` — queries active communities ordered by title
+- Single community → format_period_selection, multiple → format_community_selection
+- Registered in mod.rs as `.branch()` in `private_message_handler` using `dptree::filter` on message text
+- Tests use unified FakeTelegramApi with all trait methods (replaces per-section duplicates)
+- 3 new tests: multi_community, single_community, unauthorized — all pass
+- `make_test_config()` helper constructs Config with specified moderator IDs
