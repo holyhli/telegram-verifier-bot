@@ -90,6 +90,16 @@ pub async fn process_language_selection_callback(
             // The user typed their name earlier; it was saved to applicants.first_name.
             AnswerRepo::create(pool, join_request.id, first_question.id, &applicant.first_name).await?;
 
+            // Record question_presented + answer_accepted for Q1 (name question).
+            // The name was collected before language selection; we emit both events now
+            // so that compute_per_question_timing can calculate a duration for Q1.
+            if let Err(e) = QuestionEventRepo::create(pool, join_request.id, first_question.id, join_request.applicant_id, QuestionEventType::QuestionPresented, None).await {
+                tracing::error!(join_request_id = join_request.id, error = %e, "failed to record question_presented event for Q1");
+            }
+            if let Err(e) = QuestionEventRepo::create(pool, join_request.id, first_question.id, join_request.applicant_id, QuestionEventType::AnswerAccepted, None).await {
+                tracing::error!(join_request_id = join_request.id, error = %e, "failed to record answer_accepted event for Q1");
+            }
+
             // Create session starting at position 2 (question 1 already answered).
             let start_position = if second_question.is_some() { 2 } else { 1 };
             SessionRepo::create(pool, join_request.id, start_position, language).await?;
