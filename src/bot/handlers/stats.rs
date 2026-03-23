@@ -166,7 +166,7 @@ impl StatsCallbackData {
 
         let parts: Vec<&str> = data.split(':').collect();
 
-        match parts.get(0).copied() {
+        match parts.first().copied() {
             Some("sc") => {
                 // SelectCommunity: sc:{community_id}
                 if parts.len() != 2 {
@@ -268,7 +268,7 @@ pub async fn process_stats_callback(
             let title = load_community_title(pool, community_id).await?;
             let applicants =
                 StatsService::get_active_applicants(pool, community_id).await?;
-            let total_pages = ((applicants.len() + PAGE_SIZE - 1) / PAGE_SIZE).max(1) as u32;
+            let total_pages = applicants.len().div_ceil(PAGE_SIZE).max(1) as u32;
             let (text, keyboard) = StatsFormatter::format_active_view(
                 &title,
                 community_id,
@@ -298,7 +298,7 @@ pub async fn process_stats_callback(
                     let applicants =
                         StatsService::get_active_applicants(pool, community_id).await?;
                     let total_pages =
-                        ((applicants.len() + PAGE_SIZE - 1) / PAGE_SIZE).max(1) as u32;
+                        applicants.len().div_ceil(PAGE_SIZE).max(1) as u32;
                     let page = page.clamp(1, total_pages);
                     let (text, keyboard) = StatsFormatter::format_active_view(
                         &title,
@@ -325,7 +325,7 @@ pub async fn process_stats_callback(
                     )
                     .await?;
                     let total_pages =
-                        ((summaries.len() + PAGE_SIZE - 1) / PAGE_SIZE).max(1) as u32;
+                        summaries.len().div_ceil(PAGE_SIZE).max(1) as u32;
                     let page = page.clamp(1, total_pages);
                     let (text, keyboard) = StatsFormatter::format_summary_view(
                         &title,

@@ -174,7 +174,7 @@ impl StatsFormatter {
             for qt in &s.question_timings {
                 let dur = qt
                     .duration_secs
-                    .map(|d| format_duration(d))
+                    .map(format_duration)
                     .unwrap_or_else(|| "—".to_string());
                 let warning = if qt.duration_secs.unwrap_or(0) > 600 {
                     " ⚠️"
@@ -192,7 +192,7 @@ impl StatsFormatter {
 
             let total_dur = s
                 .total_time_secs
-                .map(|d| format_duration(d))
+                .map(format_duration)
                 .unwrap_or_else(|| "—".to_string());
             text.push_str(&format!(
                 "   Total: {} | Retries: {}\n",
