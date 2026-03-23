@@ -14,7 +14,7 @@ use crate::services::moderator::{
     load_moderator_card_answers, load_moderator_card_context, render_moderator_card,
 };
 
-use super::{language_selection, TelegramApi, TeloxideApi};
+use super::{language_selection, stats, TelegramApi, TeloxideApi};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CallbackAction {
@@ -54,6 +54,33 @@ pub async fn handle_callback_query(
 ) -> Result<(), AppError> {
     let callback_data = query.data.clone();
     let api = TeloxideApi::new(bot);
+
+    if let Some(ref data) = callback_data {
+        if data.starts_with("sc:") || data.starts_with("sp:") || data.starts_with("sn:") {
+            let regular_message = query.regular_message().cloned();
+            let chat_id = regular_message
+                .as_ref()
+                .map(|m| m.chat.id.0)
+                .unwrap_or(0);
+            let message_id = regular_message
+                .as_ref()
+                .map(|m| m.id.0)
+                .unwrap_or(0);
+            return stats::process_stats_callback(
+                &api,
+                &pool,
+                &config,
+                stats::StatsCallbackInput {
+                    chat_id,
+                    message_id,
+                    callback_query_id: query.id.to_string(),
+                    telegram_user_id: query.from.id.0 as i64,
+                    data: data.clone(),
+                },
+            )
+            .await;
+        }
+    }
 
     if let Some(ref data) = callback_data {
         if data.starts_with("lang:") {

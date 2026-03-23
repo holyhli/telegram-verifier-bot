@@ -25,3 +25,39 @@
 - Enum sqlx attrs: `#[sqlx(type_name = "text", rename_all = "snake_case")]` (exact pattern from JoinRequestStatus)
 - Struct derives: Debug, Clone, serde::Serialize, serde::Deserialize, sqlx::FromRow
 - Registered in `src/domain/mod.rs` with pub mod and re-exports
+
+## Task 2: TelegramApi Trait Extension
+- `edit_message_html_with_markup` was already committed in fadb7e9 (task 1 pre-included it)
+- Method uses `message_id: i32` (differs from existing `edit_message_html` which uses `i64`)
+- Keyboard conversion pattern reused from `send_message_with_inline_keyboard` in TeloxideApi
+- moderation_tests.rs and expiry_tests.rs were missing `send_message_with_inline_keyboard` — added stubs
+- language_selection_tests.rs has 52 pre-existing compile errors (not from this task)
+- DB user needed CREATEDB grant for sqlx tests: `ALTER USER verifier CREATEDB`
+
+## Task 4: QuestionEventRepo
+- `query_as!` macro does compile-time checking — requires migration run on live DB first
+- Migration 011 needed: `cargo sqlx migrate run` before compilation
+- Enum casting in RETURNING clause: `event_type as "event_type: QuestionEventType"` works
+- For `count_validation_failures`, used `sqlx::query_as::<_, (i64, i64)>` (runtime-checked) since tuple results don't need the enum casting
+- Test seed chain: community → community_question → applicant → join_request → question_event
+- Tests appended outside `#[cfg(test)] mod tests {}` block since `#[sqlx::test]` must be top-level
+
+## Task 6: Stats Formatter
+- StatsFormatter is pure (no DB, no API) — takes data, returns (String, Vec<Vec<(String, String)>>)
+- Defined ActiveApplicantInfo, ApplicantSummary, QuestionTiming locally (T5 builds in parallel)
+- html_escape() needed for community titles and question text in HTML messages
+- truncate_to_limit() ensures 4096 char Telegram limit — cuts at UTF-8 boundary
+- format_duration: 0-59s → "Xs", 60-3599 → "Xm Ys", 3600+ → "Xh Ym"
+- build_nav_keyboard: Prev only if page>1, Next only if page<total_pages, toggle always present
+- Period selection uses 2x2 grid layout
+- Community selection: one row per community
+- All 9 formatter tests pass (no DB needed — pure logic tests)
+
+## Task 7: Event Instrumentation in Questionnaire Flow
+- `context` is moved into `process_answer()` — must extract IDs (jr_id, applicant_id, current_question_id) BEFORE the call
+- ValidationFailed event uses `current_question_id` (the question that was being answered)
+- QuestionPresented event in NextQuestion arm uses `question.id` (the NEW question being presented)
+- In language_selection.rs, the "first question presented" is actually `second_question` (position 2) since question 1 (name) was answered via name prompt
+- `second_question` is `Option<&CommunityQuestion>` — must wrap with `if let Some(q)` guard
+- All event failures use `if let Err(e) = ... { tracing::error!(...) }` — never propagate to user
+- 27 tests pass with 0 failures after instrumentation
