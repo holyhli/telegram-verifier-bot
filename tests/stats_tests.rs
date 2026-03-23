@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use verifier_bot::domain::{QuestionEvent, QuestionEventType};
+    use verifier_bot::domain::QuestionEventType;
 
     #[test]
     fn test_question_event_type_variants() {
