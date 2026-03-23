@@ -253,7 +253,7 @@ fn truncate_to_limit(text: String, limit: usize) -> String {
     // Find a safe UTF-8 boundary
     let safe_cut = text
         .char_indices()
-        .take_while(|(i, _)| *i <= cut)
+        .take_while(|(i, _)| *i < cut)
         .last()
         .map(|(i, c)| i + c.len_utf8())
         .unwrap_or(0);
