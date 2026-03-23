@@ -1,0 +1,8 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.15s
+     Running tests/stats_tests.rs (target/debug/deps/stats_tests-db53eb3e4e763926)
+
+running 1 test
+test test_full_stats_flow ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 26 filtered out; finished in 0.56s
+

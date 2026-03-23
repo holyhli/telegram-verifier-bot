@@ -703,7 +703,7 @@ use std::sync::{Arc, Mutex};
 use teloxide::RequestError;
 use teloxide::types::InlineKeyboardMarkup;
 use verifier_bot::bot::handlers::TelegramApi;
-use verifier_bot::bot::handlers::stats::{StatsCallbackData, StatsCommandInput, StatsPeriod, process_stats_command};
+use verifier_bot::bot::handlers::stats::{StatsCallbackData, StatsCallbackInput, StatsCommandInput, StatsPeriod, StatsView, process_stats_callback, process_stats_command};
 use verifier_bot::config::{Config, BotSettings};
 
 #[derive(Debug, Clone)]
@@ -1230,4 +1230,165 @@ mod callback_handler_tests {
 
         Ok(())
     }
+}
+
+// --- End-to-End Integration Test ---
+
+#[sqlx::test(migrations = "./migrations")]
+async fn test_full_stats_flow(pool: PgPool) -> sqlx::Result<()> {
+    // === SEED DATA: 1 community, 3 questions, 3 applicants ===
+    let community_id = seed_community_with_title(
+        &pool, -1009555555555, "E2E Stats Community", "e2e-stats",
+    ).await;
+    let q1 = seed_question(&pool, community_id, 1).await;
+    let q2 = seed_question(&pool, community_id, 2).await;
+    let q3 = seed_question(&pool, community_id, 3).await;
+
+    // Applicant A: questionnaire_in_progress, on Q2, with events:
+    //   question_presented(Q1), validation_failed(Q1), answer_accepted(Q1), question_presented(Q2)
+    let app_a = seed_applicant(&pool, 900001).await;
+    let jr_a = seed_join_request(&pool, community_id, app_a).await;
+    activate_join_request(&pool, jr_a).await;
+    seed_session(&pool, jr_a, 2, "awaiting_answer").await;
+    seed_question_event(&pool, jr_a, q1, app_a, "question_presented").await;
+    seed_question_event(&pool, jr_a, q1, app_a, "validation_failed").await;
+    seed_question_event(&pool, jr_a, q1, app_a, "answer_accepted").await;
+    seed_question_event(&pool, jr_a, q2, app_a, "question_presented").await;
+
+    // Applicant B: submitted (completed all questions), full event trail
+    let app_b = seed_applicant(&pool, 900002).await;
+    let jr_b = seed_join_request(&pool, community_id, app_b).await;
+    submit_join_request(&pool, jr_b).await;
+    seed_session(&pool, jr_b, 3, "completed").await;
+    seed_question_event(&pool, jr_b, q1, app_b, "question_presented").await;
+    seed_question_event(&pool, jr_b, q1, app_b, "answer_accepted").await;
+    seed_question_event(&pool, jr_b, q2, app_b, "question_presented").await;
+    seed_question_event(&pool, jr_b, q2, app_b, "answer_accepted").await;
+    seed_question_event(&pool, jr_b, q3, app_b, "question_presented").await;
+    seed_question_event(&pool, jr_b, q3, app_b, "answer_accepted").await;
+
+    // Applicant C: approved, completed 1 week ago
+    let app_c = seed_applicant(&pool, 900003).await;
+    let one_week_ago = Utc::now() - chrono::Duration::days(7);
+    let jr_c = seed_join_request_at(&pool, community_id, app_c, one_week_ago, "approved").await;
+    seed_session(&pool, jr_c, 3, "completed").await;
+    seed_question_event(&pool, jr_c, q1, app_c, "question_presented").await;
+    seed_question_event(&pool, jr_c, q1, app_c, "answer_accepted").await;
+
+    let moderator_id: i64 = 55555;
+    let config = make_test_config(vec![moderator_id]);
+    let api = FakeTelegramApi::new();
+
+    // === STEP 1: /stats command → period selection keyboard (single community) ===
+    let cmd_input = StatsCommandInput {
+        chat_id: 11111,
+        telegram_user_id: moderator_id,
+    };
+    process_stats_command(&api, &pool, &config, cmd_input)
+        .await
+        .expect("stats command");
+
+    let keyboards = api.keyboards_sent();
+    assert_eq!(keyboards.len(), 1, "should send period selection keyboard");
+    let (chat_id, text, keyboard) = &keyboards[0];
+    assert_eq!(*chat_id, 11111);
+    assert!(text.contains("E2E Stats Community"), "should contain community name");
+    assert!(text.contains("Select time period"), "should prompt period selection");
+    assert_eq!(keyboard.len(), 2, "2x2 period grid rows");
+    assert_eq!(keyboard[0].len(), 2, "2x2 period grid cols");
+
+    // === STEP 2: SelectPeriod AllTime callback → active view shows Applicant A ===
+    let all_time_btn = keyboard
+        .iter()
+        .flat_map(|r| r.iter())
+        .find(|(label, _)| label == "All Time")
+        .expect("All Time button");
+
+    let cb_input1 = StatsCallbackInput {
+        chat_id: 11111,
+        message_id: 1,
+        callback_query_id: "e2e-cb-1".to_string(),
+        telegram_user_id: moderator_id,
+        data: all_time_btn.1.clone(),
+    };
+    process_stats_callback(&api, &pool, &config, cb_input1)
+        .await
+        .expect("select period callback");
+
+    let edits = api.edited_messages_with_markup.lock().unwrap().clone();
+    assert_eq!(edits.len(), 1, "should edit message with active view");
+    let active_text = &edits[0].2;
+    assert!(active_text.contains("Active (All Time)"), "active view header");
+    assert!(
+        active_text.contains("1 applicant in progress"),
+        "should show exactly 1 active applicant (Applicant A)"
+    );
+
+    // === STEP 3: Navigate to Summary view → shows all 3 applicants ===
+    let active_kb = edits[0].3.as_ref().expect("active view keyboard");
+    let toggle_btn = active_kb
+        .iter()
+        .flat_map(|r| r.iter())
+        .find(|(label, _)| label.contains("Summary"))
+        .expect("Summary toggle button");
+
+    // Verify toggle callback data navigates to Summary
+    let nav_data = StatsCallbackData::parse(&toggle_btn.1).expect("parse toggle callback");
+    match &nav_data {
+        StatsCallbackData::Navigate { view, period, page, .. } => {
+            assert_eq!(*view, StatsView::Summary);
+            assert_eq!(*period, StatsPeriod::AllTime);
+            assert_eq!(*page, 1);
+        }
+        other => panic!("expected Navigate to Summary, got {:?}", other),
+    }
+
+    let cb_input2 = StatsCallbackInput {
+        chat_id: 11111,
+        message_id: 1,
+        callback_query_id: "e2e-cb-2".to_string(),
+        telegram_user_id: moderator_id,
+        data: toggle_btn.1.clone(),
+    };
+    process_stats_callback(&api, &pool, &config, cb_input2)
+        .await
+        .expect("navigate to summary");
+
+    let edits2 = api.edited_messages_with_markup.lock().unwrap().clone();
+    assert_eq!(edits2.len(), 2, "second edit for summary view");
+    let summary_text = &edits2[1].2;
+    assert!(summary_text.contains("Summary (All Time)"), "summary view header");
+    // All 3 applicants visible: verify statuses from each
+    assert!(summary_text.contains("Submitted"), "Applicant B (submitted) in summary");
+    assert!(summary_text.contains("Approved"), "Applicant C (approved) in summary");
+    // Verify entry #3 exists (proving all 3 are listed)
+    assert!(summary_text.contains("3. TestUser"), "3rd applicant entry in summary");
+
+    // === STEP 4: Access control — non-moderator gets no response ===
+    let non_mod_api = FakeTelegramApi::new();
+    let non_mod_input = StatsCommandInput {
+        chat_id: 22222,
+        telegram_user_id: 99999, // Not in allowed_moderator_ids
+    };
+    process_stats_command(&non_mod_api, &pool, &config, non_mod_input)
+        .await
+        .expect("non-mod stats");
+    assert!(non_mod_api.sent_messages().is_empty(), "non-moderator: no messages");
+    assert!(non_mod_api.keyboards_sent().is_empty(), "non-moderator: no keyboards");
+
+    // === VERIFY DB STATE: question_events for Applicant A ===
+    let events_a = QuestionEventRepo::find_by_join_request_id(&pool, jr_a)
+        .await
+        .expect("find events for Applicant A");
+    assert_eq!(events_a.len(), 4, "Applicant A should have 4 question events");
+    assert_eq!(events_a[0].event_type, QuestionEventType::QuestionPresented);
+    assert_eq!(events_a[0].community_question_id, q1);
+    assert_eq!(events_a[1].event_type, QuestionEventType::ValidationFailed);
+    assert_eq!(events_a[1].community_question_id, q1);
+    assert_eq!(events_a[2].event_type, QuestionEventType::AnswerAccepted);
+    assert_eq!(events_a[2].community_question_id, q1);
+    assert_eq!(events_a[3].event_type, QuestionEventType::QuestionPresented);
+    assert_eq!(events_a[3].community_question_id, q2);
+
+    Ok(())
 }
