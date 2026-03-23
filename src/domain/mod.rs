@@ -6,6 +6,7 @@ pub mod join_request;
 pub mod language;
 pub mod moderation;
 pub mod session;
+pub mod question_event;
 
 pub use answer::JoinRequestAnswer;
 pub use applicant::Applicant;
@@ -15,3 +16,4 @@ pub use join_request::{JoinRequest, JoinRequestStatus};
 pub use language::Language;
 pub use moderation::{ActionType, ModerationAction};
 pub use session::{ApplicantSession, SessionState};
+pub use question_event::{QuestionEvent, QuestionEventType};
